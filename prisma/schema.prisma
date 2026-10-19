@@ -7,13 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Solicitud que llega desde el formulario de la página (pedir cita o
+// preguntar algo). El negocio la ve en el panel y la marca como atendida.
 model Mensaje {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  email     String
-  telefono  String?
-  mensaje   String
-  creadoEn  DateTime @default(now())
+  id         Int       @id @default(autoincrement())
+  nombre     String
+  email      String
+  telefono   String?
+  mascota    String?
+  servicio   String?
+  mensaje    String
+  estado     String    @default("NUEVO") // NUEVO | ATENDIDO
+  creadoEn   DateTime  @default(now())
+  atendidoEn DateTime?
+
+  @@index([estado, creadoEn])
 }
 
 model Usuario {
