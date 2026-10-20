@@ -2,6 +2,8 @@
 
 API REST de la landing de Huellitas Veterinaria (negocio **ficticio**, proyecto de portafolio): recibe las solicitudes de cita del formulario público y las entrega a un panel privado con login.
 
+**Demo en vivo:** [huellitas-veterinaria.vercel.app](https://huellitas-veterinaria.vercel.app) · API: [huellitas-api-s584.onrender.com](https://huellitas-api-s584.onrender.com) (plan gratis de Render: la primera petición puede tardar unos 50 segundos).
+
 ## Tecnologías
 
 Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · express-rate-limit
@@ -61,6 +63,12 @@ npm run dev                        # http://localhost:3001
 ```
 
 `npm run start:demo` aplica las migraciones, recarga los datos de ejemplo y enciende la API (pensado para la demo pública). El script de demo se niega a correr sin `DEMO=true`, porque borra las solicitudes.
+
+## Publicación (demo)
+
+- **Base de datos:** PostgreSQL en Neon (conexión directa, sin pooler, para que funcionen las migraciones).
+- **API:** Render, plan gratis. Build: `npm install --include=dev && npx prisma generate` (Prisma está en devDependencies). Start: `npm run start:demo`.
+- **Variables en Render:** `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `CORS_ORIGIN` (la dirección de la página en Vercel) y `TRUST_PROXY=3` (Render pone 3 proxies delante de la API; sin este valor el límite de intentos no ve la IP real).
 
 ## Frontend
 

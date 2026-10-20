@@ -25,8 +25,10 @@ app.use(helmet());
 app.use(cors(origenes.length ? { origin: origenes } : {}));
 // Se guarda el cuerpo tal como llegó: WhatsApp firma los bytes exactos.
 app.use(express.json({ limit: '100kb', verify: (req, res, buf) => { req.cuerpoCrudo = buf; } }));
-// En Render la API va detrás de un proxy: así el límite de intentos ve la IP real.
-if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+// En Render la API va detrás de varios proxies (Cloudflare, balanceador y proxy
+// interno: TRUST_PROXY=3). Sin el número correcto, el límite de intentos no ve
+// la IP real del visitante.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
 
 const SERVICIOS = ['Consulta general', 'Vacunación', 'Peluquería', 'Urgencias', 'Otro'];
 const ESTADOS = ['NUEVO', 'ATENDIDO'];
