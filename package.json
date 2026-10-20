@@ -8,7 +8,9 @@
     "dev": "node --watch index.js",
     "crear-admin": "node scripts/crear-admin.js",
     "demo": "node scripts/demo.js",
-    "start:demo": "prisma migrate deploy && DEMO=true node scripts/demo.js && node index.js"
+    "start:demo": "prisma migrate deploy && DEMO=true node scripts/demo.js && node index.js",
+    "pretest": "node tests/preparar-bd.js",
+    "test": "jest --runInBand"
   },
   "keywords": [],
   "author": "",
@@ -25,7 +27,9 @@
   },
   "devDependencies": {
     "dotenv": "^17.4.2",
-    "prisma": "^5.20.0"
+    "jest": "^29.7.0",
+    "prisma": "^5.20.0",
+    "supertest": "^7.3.1"
   },
   "allowScripts": {
     "@prisma/client@5.20.0": true,

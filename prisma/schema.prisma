@@ -18,6 +18,7 @@ model Mensaje {
   servicio   String?
   mensaje    String
   estado     String    @default("NUEVO") // NUEVO | ATENDIDO
+  origen     String    @default("WEB")   // WEB | WHATSAPP
   creadoEn   DateTime  @default(now())
   atendidoEn DateTime?
 
@@ -28,4 +29,14 @@ model Usuario {
   id       Int    @id @default(autoincrement())
   email    String @unique
   password String
+}
+
+// Conversación en curso con el asistente de WhatsApp (o con el simulador de
+// la página). Guarda en qué paso va y los datos que ya dio la persona, para
+// que el bot recuerde la conversación aunque el servidor se reinicie.
+model ConversacionBot {
+  id            String   @id // número de WhatsApp o "sim:<id>" en el simulador
+  estado        String   @default("INICIO")
+  datos         Json     @default("{}")
+  actualizadoEn DateTime @updatedAt
 }
