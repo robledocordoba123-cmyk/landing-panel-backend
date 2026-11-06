@@ -87,7 +87,7 @@ describe('El cliente maneja su cita con el enlace', () => {
     const { body } = await reservar();
     const res = await abrir(body.token);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ servicio: 'Consulta general', mascota: 'Toby', estado: 'PENDIENTE', sePuedeGestionar: true });
+    expect(res.body).toMatchObject({ servicio: 'Consulta general', mascota: 'Toby', especie: 'Perro', estado: 'PENDIENTE', sePuedeGestionar: true });
     expect(JSON.stringify(res.body)).not.toMatch(/laura@correo|300 000/);
   });
 
