@@ -4,8 +4,12 @@
 // en qué paso va aunque el servidor se reinicie.
 const negocio = require('./negocio');
 const { responderConIA } = require('./ia');
+const { interpretarFecha } = require('./fechas');
+const { ErrorAgenda, crearCita, disponibilidad } = require('../citas/agenda');
+const { fechaLegible, fechaLocal, horaLegible, jornadaDe } = require('../citas/horario');
 
 const MINUTOS_SIN_RESPUESTA = 30; // después de esto, la conversación vuelve a empezar
+const HORARIOS_A_OFRECER = 8; // para que la lista quepa bien en el chat
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const pesos = (n) => `$${n.toLocaleString('es-CO')}`;
 
@@ -18,10 +22,13 @@ const MENU = [
 ];
 const OPCIONES_MENU = ['1', '2', '3', '4'];
 
-const textoServicios = () =>
-  `Estos son nuestros servicios:\n${negocio.servicios.map((s) => `• *${s.nombre}*: ${s.detalle}, desde ${pesos(s.desde)}`).join('\n')}\n\nSi quieres una cita, escribe *3*.`;
+const textoServicios = (servicios) =>
+  `Estos son nuestros servicios:\n${servicios.map((s) => `• *${s.nombre}*: ${s.detalle}, desde ${pesos(s.precioDesde)}`).join('\n')}\n\nSi quieres agendar una cita, escribe *3*.`;
 const textoHorarios = () => `🕒 ${negocio.horarios.join('\n🕒 ')}\n📍 ${negocio.ubicacion}\n💳 Recibimos ${negocio.pagos}.`;
-const listaServicios = () => negocio.servicios.map((s, i) => `${i + 1}. ${s.nombre}`).join('\n');
+const listaServicios = (servicios) => servicios.map((s, i) => `${i + 1}. ${s.nombre}`).join('\n');
+const PREGUNTA_FECHA = '¿Para qué día? Escribe *hoy*, *mañana*, un día (ej.: *sábado*) o una fecha (ej.: *15/11*).';
+const todosLosServicios = (prisma) => prisma.servicio.findMany({ orderBy: { id: 'asc' } });
+const reservables = async (prisma) => (await todosLosServicios(prisma)).filter((s) => s.reservable);
 
 const URGENCIA = /(urgencia|emergencia|sangr|envenen|no respira|convuls|atropell|desmay)/;
 
@@ -91,50 +98,85 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
   }
   if (estado === 'CITA_MASCOTA') {
     if (original.length < 2 || original.length > 60) return responder(['Cuéntame el nombre de tu mascota y qué animal es.'], estado, datos);
-    return responder([`¿Qué servicio necesitas? Escribe el número:\n${listaServicios()}`], 'CITA_SERVICIO', { ...datos, mascota: original });
+    return responder([`¿Qué servicio necesitas? Escribe el número:\n${listaServicios(await reservables(prisma))}`], 'CITA_SERVICIO', { ...datos, mascota: original });
   }
   if (estado === 'CITA_SERVICIO') {
-    const porNumero = negocio.servicios[Number(t) - 1];
-    const porNombre = negocio.servicios.find((s) => normalizar(s.nombre).includes(t) && t.length >= 4);
-    const servicio = porNumero || porNombre;
-    if (!servicio) return responder([`No encontré ese servicio. Escribe el número:\n${listaServicios()}`], estado, datos);
-    return responder(['¿A qué correo te enviamos la confirmación?'], 'CITA_CORREO', { ...datos, servicio: servicio.nombre });
+    const opciones = await reservables(prisma);
+    const servicio = opciones[Number(t) - 1] || opciones.find((o) => normalizar(o.nombre).includes(t) && t.length >= 4);
+    if (!servicio) return responder([`No encontré ese servicio. Escribe el número:\n${listaServicios(opciones)}`], estado, datos);
+    return responder([PREGUNTA_FECHA], 'CITA_FECHA', { ...datos, servicioId: servicio.id, servicio: servicio.nombre });
+  }
+  if (estado === 'CITA_FECHA' || estado === 'CITA_HORA') {
+    const elegido = estado === 'CITA_HORA' ? datos.opciones[Number(t) - 1] : null;
+    if (elegido) {
+      const inicio = new Date(elegido);
+      const { opciones, ...resto } = datos;
+      return responder(
+        [`Perfecto: *${fechaLegible(inicio)}* a las *${horaLegible(inicio)}*. ¿A qué correo te enviamos la confirmación?`],
+        'CITA_CORREO',
+        { ...resto, inicio: elegido },
+      );
+    }
+    const fecha = interpretarFecha(t, fechaLocal(new Date()));
+    if (!fecha) {
+      const repetir = estado === 'CITA_HORA' ? 'Escribe el número del horario, u otra fecha si prefieres.' : `No entendí la fecha. ${PREGUNTA_FECHA}`;
+      return responder([repetir], estado, datos);
+    }
+    const servicio = await prisma.servicio.findUnique({ where: { id: datos.servicioId } });
+    const libres = (await disponibilidad(prisma, servicio, fecha)).slice(0, HORARIOS_A_OFRECER);
+    if (!libres.length) return responder([`Ese día no tengo horarios libres para ${servicio.nombre}. Prueba con otro día, por favor.`], 'CITA_FECHA', datos);
+    const lista = libres.map((h, i) => `${i + 1}. ${horaLegible(h)}`).join('\n');
+    const reducida = jornadaDe(fecha).abre !== 8 * 60 ? ' (ese día atendemos de 9:00 a. m. a 2:00 p. m.)' : '';
+    return responder(
+      [`Estos son los horarios libres del *${fechaLegible(libres[0])}*${reducida}:\n${lista}\n\nEscribe el número, u otra fecha si prefieres.`],
+      'CITA_HORA',
+      { ...datos, opciones: libres.map((h) => h.toISOString()) },
+    );
   }
   if (estado === 'CITA_CORREO') {
     if (!CORREO.test(original)) return responder(['Ese correo no parece válido. Escríbelo de nuevo, por favor (ej.: nombre@gmail.com).'], estado, datos);
     const d = { ...datos, email: original.toLowerCase() };
+    const inicio = new Date(d.inicio);
     return responder([
-      `Revisa tu solicitud:\n👤 ${d.nombre}\n🐾 ${d.mascota}\n🩺 ${d.servicio}\n✉️ ${d.email}`,
-      '¿Está bien? Responde *sí* para enviarla o *no* para empezar de nuevo.',
+      `Revisa tu cita:\n👤 ${d.nombre}\n🐾 ${d.mascota}\n🩺 ${d.servicio}\n📅 ${fechaLegible(inicio)}, ${horaLegible(inicio)}\n✉️ ${d.email}`,
+      '¿Está bien? Responde *sí* para reservarla o *no* para empezar de nuevo.',
     ], 'CITA_CONFIRMAR', d);
   }
   if (estado === 'CITA_CONFIRMAR') {
     if (/^(si|sí|s|ok|dale|listo|confirmo)/.test(t)) {
-      await crearSolicitud(prisma, { ...datos, telefono, mensaje: `Cita de ${datos.servicio} pedida por WhatsApp.` });
+      const servicio = await prisma.servicio.findUnique({ where: { id: datos.servicioId } });
+      const inicio = new Date(datos.inicio);
+      try {
+        await crearCita(prisma, { servicio, inicio, nombre: datos.nombre, email: datos.email, telefono, mascota: datos.mascota, origen: 'WHATSAPP' });
+      } catch (err) {
+        if (!(err instanceof ErrorAgenda)) throw err;
+        const { inicio: _inicio, ...resto } = datos;
+        return responder([err.message, PREGUNTA_FECHA], 'CITA_FECHA', resto);
+      }
       return responder([
-        `¡Listo! ✅ Recibimos tu solicitud de *${datos.servicio}* para ${datos.mascota}.`,
-        'El equipo te confirmará la hora el mismo día. Si necesitas algo más, escribe *menú*.',
+        `¡Listo! ✅ Reservé tu cita de *${datos.servicio}* para ${datos.mascota}: *${fechaLegible(inicio)}* a las *${horaLegible(inicio)}*.`,
+        'El equipo la confirmará pronto. Si necesitas algo más, escribe *menú*.',
       ]);
     }
     if (/^(no|n)$/.test(t)) {
       return responder(['Sin problema, empecemos de nuevo. ¿Cuál es tu nombre?'], 'CITA_NOMBRE', {});
     }
-    return responder(['Responde *sí* para enviar la solicitud o *no* para empezar de nuevo.'], estado, datos);
+    return responder(['Responde *sí* para reservar la cita o *no* para empezar de nuevo.'], estado, datos);
   }
   if (estado === 'HUMANO') {
     return responder(['Ya le avisé al equipo y te escribirán por aquí pronto. Si quieres volver al menú, escribe *menú*.'], 'HUMANO', datos);
   }
 
   // Menú principal y preguntas sueltas.
-  if (t === '1' || /(servicio|precio|cuanto|vale|cuesta|vacuna|pelu|bano|consulta)/.test(t)) return responder([textoServicios()]);
+  if (t === '1' || /(servicio|precio|cuanto|vale|cuesta|vacuna|pelu|bano|consulta)/.test(t)) return responder([textoServicios(await todosLosServicios(prisma))]);
   if (t === '2' || /(horario|hora|abren|cierran|ubicacion|direccion|donde|queda|domingo|festivo|pago|nequi)/.test(t)) return responder([textoHorarios()]);
-  if (t === '3' || /(cita|agendar|agenda|turno|reservar)/.test(t)) return responder(['¡Claro! Te ayudo a pedir la cita. ¿Cuál es tu nombre?'], 'CITA_NOMBRE', {});
+  if (t === '3' || /(cita|agendar|agenda|turno|reservar)/.test(t)) return responder(['¡Claro! Te ayudo a reservar la cita. ¿Cuál es tu nombre?'], 'CITA_NOMBRE', {});
   if (t === '4' || /(persona|humano|asesor|agente)/.test(t)) {
     await crearSolicitud(prisma, { telefono, mensaje: `Pidió hablar con una persona por WhatsApp. Último mensaje: "${original}"` });
     return responder(['Te paso con una persona del equipo. 🙋 Te escribirán por aquí en horario de atención.'], 'HUMANO', {});
   }
 
-  const deIA = await responderConIA(original);
+  const deIA = await responderConIA(original, await todosLosServicios(prisma));
   if (deIA) return responder([deIA, 'Si quieres ver las opciones, escribe *menú*.']);
   return responder(['No te entendí del todo. 😅', ...MENU]);
 }
