@@ -24,7 +24,20 @@ const opcionesCookie = () => ({
   path: '/api',
 });
 
-const limiteLogin = rateLimit({ skip: () => process.env.NODE_ENV === 'test', windowMs: 15 * 60 * 1000, limit: 10, skipSuccessfulRequests: true, message: { error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' } });
+const mensajeLimite = { error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' };
+const saltarEnPruebas = () => process.env.NODE_ENV === 'test' && !process.env.PROBAR_LIMITES;
+
+// Dos límites. Por IP frena a quien prueba muchas cuentas; es más alto porque una
+// oficina comparte IP. Por cuenta frena a quien ataca una sola, aunque cambie de IP.
+const limitePorIp = rateLimit({ skip: saltarEnPruebas, windowMs: 15 * 60 * 1000, limit: 30, skipSuccessfulRequests: true, message: mensajeLimite });
+const limitePorCuenta = rateLimit({
+  skip: saltarEnPruebas,
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `cuenta:${String(req.body?.email).trim().toLowerCase().slice(0, 120)}`,
+  message: mensajeLimite,
+});
 
 const publico = (u) => ({ id: u.id, nombre: u.nombre, email: u.email, rol: u.rol });
 
@@ -64,7 +77,7 @@ const soloFueraDeDemo = (req, res, next) => {
 function crearRutasSesion(prisma, verificarSesion) {
   const rutas = express.Router();
 
-  rutas.post('/login', limiteLogin, async (req, res) => {
+  rutas.post('/login', limitePorIp, limitePorCuenta, async (req, res) => {
     const { email, password } = req.body || {};
     if (typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Correo y contraseña son obligatorios' });
