@@ -3,6 +3,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { ErrorAgenda, cambiarEstado, citasEntre, crearCita, disponibilidad } = require('./agenda');
 const { fechaLocal, fechaValida, horaLegible, jornadaDe, sumarDias } = require('./horario');
+const { ESPECIES } = require('../clientes/mascotas');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DIAS_MAX_CONSULTA = 31;
@@ -15,7 +16,8 @@ function validarReserva(cuerpo) {
   if (texto(cuerpo.nombre).length < 2 || texto(cuerpo.nombre).length > 80) return 'Escribe tu nombre (entre 2 y 80 letras).';
   if (!CORREO.test(texto(cuerpo.email)) || texto(cuerpo.email).length > 120) return 'Escribe un correo válido.';
   if (!/^[\d\s+()-]{7,20}$/.test(texto(cuerpo.telefono))) return 'Escribe un teléfono válido para confirmarte la cita.';
-  if (texto(cuerpo.mascota).length < 2 || texto(cuerpo.mascota).length > 60) return 'Escribe el nombre de tu mascota y qué animal es.';
+  if (texto(cuerpo.mascota).length < 1 || texto(cuerpo.mascota).length > 60) return 'Escribe el nombre de tu mascota.';
+  if (!ESPECIES.includes(cuerpo.especie)) return 'Elige qué animal es tu mascota.';
   if (texto(cuerpo.notas).length > 500) return 'La nota es muy larga (máximo 500 letras).';
   if (!Number.isInteger(cuerpo.servicioId)) return 'Elige un servicio.';
   if (typeof cuerpo.inicio !== 'string' || Number.isNaN(new Date(cuerpo.inicio).getTime())) return 'Elige un horario.';
@@ -70,6 +72,7 @@ function crearRutasCitas(prisma, verificarToken) {
         email: texto(cuerpo.email).toLowerCase(),
         telefono: texto(cuerpo.telefono),
         mascota: texto(cuerpo.mascota),
+        especie: cuerpo.especie,
         notas: texto(cuerpo.notas) || null,
       });
       res.status(201).json(citaPublica(cita));

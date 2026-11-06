@@ -7,6 +7,7 @@ const { responderConIA } = require('./ia');
 const { interpretarFecha } = require('./fechas');
 const { ErrorAgenda, crearCita, disponibilidad } = require('../citas/agenda');
 const { fechaLegible, fechaLocal, horaLegible, jornadaDe } = require('../citas/horario');
+const { leerMascota } = require('../clientes/mascotas');
 
 const MINUTOS_SIN_RESPUESTA = 30; // después de esto, la conversación vuelve a empezar
 const HORARIOS_A_OFRECER = 8; // para que la lista quepa bien en el chat
@@ -147,7 +148,8 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
       const servicio = await prisma.servicio.findUnique({ where: { id: datos.servicioId } });
       const inicio = new Date(datos.inicio);
       try {
-        await crearCita(prisma, { servicio, inicio, nombre: datos.nombre, email: datos.email, telefono, mascota: datos.mascota, origen: 'WHATSAPP' });
+        const { nombre: mascota, especie } = leerMascota(datos.mascota);
+        await crearCita(prisma, { servicio, inicio, nombre: datos.nombre, email: datos.email, telefono, mascota, especie, origen: 'WHATSAPP' });
       } catch (err) {
         if (!(err instanceof ErrorAgenda)) throw err;
         const { inicio: _inicio, ...resto } = datos;

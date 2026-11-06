@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const { procesarMensaje } = require('./bot/motor');
 const { crearRutasWhatsApp } = require('./bot/whatsapp');
 const { crearRutasCitas } = require('./citas/rutas');
+const { crearRutasClientes } = require('./clientes/rutas');
 
 const prisma = new PrismaClient();
 const app = express();
@@ -135,6 +136,7 @@ app.patch('/api/mensajes/:id', verificarToken, async (req, res) => {
 
 // Agenda: servicios, horarios libres y citas.
 app.use('/api', crearRutasCitas(prisma, verificarToken));
+app.use('/api', crearRutasClientes(prisma, verificarToken));
 
 // Asistente de WhatsApp: webhook oficial de Meta y simulador para la página.
 app.use('/webhook/whatsapp', crearRutasWhatsApp(prisma));

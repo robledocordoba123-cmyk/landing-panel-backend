@@ -5,6 +5,7 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const { fechaLocal, finDe, instante, sumarDias } = require('../citas/horario');
+const { asegurarMascota } = require('../clientes/mascotas');
 
 if (process.env.DEMO !== 'true') {
   console.error('Este script borra solicitudes. Córrelo solo en la demo, con DEMO=true.');
@@ -27,25 +28,48 @@ const ejemplos = [
 // Citas alrededor de hoy, para que la agenda nunca se vea vacía. Las horas caben
 // también en la jornada corta de domingos y festivos (9:00 a. m. a 2:00 p. m.).
 const citasDeEjemplo = [
-  { dia: -1, hora: 9, servicio: 'Consulta general', nombre: 'Camilo Herrera', email: 'camilo@ejemplo.com', telefono: '300 000 0004', mascota: 'Luna (perra)', estado: 'ATENDIDA' },
-  { dia: -1, hora: 10, servicio: 'Vacunación', nombre: 'Sara Muñoz', email: 'sara@ejemplo.com', telefono: '300 000 0006', mascota: 'Nala (gata)', estado: 'NO_ASISTIO' },
-  { dia: 0, hora: 9, servicio: 'Vacunación', nombre: 'Laura Restrepo', email: 'laura@ejemplo.com', telefono: '300 000 0001', mascota: 'Toby (perro)', estado: 'CONFIRMADA', notas: 'Vacuna anual.' },
-  { dia: 0, hora: 10, servicio: 'Peluquería', nombre: 'Valentina Ríos', email: 'valentina@ejemplo.com', telefono: '300 000 0003', mascota: 'Coco (perro)', estado: 'CONFIRMADA' },
-  { dia: 0, hora: 11, servicio: 'Consulta general', nombre: 'Andrés Gómez', email: 'andres@ejemplo.com', telefono: '300 000 0002', mascota: 'Misha (gata)', estado: 'PENDIENTE', notas: 'No quiere comer desde ayer.' },
-  { dia: 1, hora: 9, servicio: 'Consulta general', nombre: 'Paola Arango', email: 'paola@ejemplo.com', telefono: '573000000005', mascota: 'Max (perro)', estado: 'PENDIENTE', origen: 'WHATSAPP' },
-  { dia: 1, hora: 11, servicio: 'Peluquería', nombre: 'Daniela Mejía', email: 'daniela@ejemplo.com', telefono: '300 000 0007', mascota: 'Rocky (perro)', estado: 'CONFIRMADA' },
+  { dia: -1, hora: 9, servicio: 'Consulta general', nombre: 'Camilo Herrera', email: 'camilo@ejemplo.com', telefono: '300 000 0004', mascota: 'Luna', especie: 'Perro', estado: 'ATENDIDA' },
+  { dia: -1, hora: 10, servicio: 'Vacunación', nombre: 'Sara Muñoz', email: 'sara@ejemplo.com', telefono: '300 000 0006', mascota: 'Nala', especie: 'Gato', estado: 'NO_ASISTIO' },
+  { dia: 0, hora: 9, servicio: 'Vacunación', nombre: 'Laura Restrepo', email: 'laura@ejemplo.com', telefono: '300 000 0001', mascota: 'Toby', especie: 'Perro', estado: 'CONFIRMADA', notas: 'Vacuna anual.' },
+  { dia: 0, hora: 10, servicio: 'Peluquería', nombre: 'Valentina Ríos', email: 'valentina@ejemplo.com', telefono: '300 000 0003', mascota: 'Coco', especie: 'Perro', estado: 'CONFIRMADA' },
+  { dia: 0, hora: 11, servicio: 'Consulta general', nombre: 'Andrés Gómez', email: 'andres@ejemplo.com', telefono: '300 000 0002', mascota: 'Misha', especie: 'Gato', estado: 'PENDIENTE', notas: 'No quiere comer desde ayer.' },
+  { dia: 1, hora: 9, servicio: 'Consulta general', nombre: 'Paola Arango', email: 'paola@ejemplo.com', telefono: '573000000005', mascota: 'Max', especie: 'Perro', estado: 'PENDIENTE', origen: 'WHATSAPP' },
+  { dia: 1, hora: 11, servicio: 'Peluquería', nombre: 'Daniela Mejía', email: 'daniela@ejemplo.com', telefono: '300 000 0007', mascota: 'Rocky', especie: 'Perro', estado: 'CONFIRMADA' },
 ];
+
+const diaUtc = (fecha) => new Date(`${fecha}T00:00:00Z`);
 
 async function crearCitasDeEjemplo() {
   const servicios = await prisma.servicio.findMany();
   const hoy = fechaLocal(new Date());
+  await prisma.atencion.deleteMany();
+  await prisma.vacuna.deleteMany();
   await prisma.cita.deleteMany();
-  await prisma.cita.createMany({
-    data: citasDeEjemplo.map(({ dia, hora, servicio: nombre, ...datos }) => {
-      const servicio = servicios.find((s) => s.nombre === nombre);
-      const inicio = instante(sumarDias(hoy, dia), hora * 60);
-      return { ...datos, servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin) };
-    }),
+  await prisma.mascota.deleteMany();
+  await prisma.cliente.deleteMany();
+
+  for (const { dia, hora, servicio: nombreServicio, nombre, email, telefono, mascota, especie, ...cita } of citasDeEjemplo) {
+    const servicio = servicios.find((s) => s.nombre === nombreServicio);
+    const inicio = instante(sumarDias(hoy, dia), hora * 60);
+    const { id: mascotaId } = await asegurarMascota(prisma, { nombre, email, telefono, mascota, especie });
+    await prisma.cita.create({ data: { ...cita, mascotaId, servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin) } });
+  }
+
+  // Historia y carné de ejemplo: Toby con una vacuna por vencer, Luna con su control.
+  const toby = await prisma.mascota.findFirst({ where: { nombre: 'Toby' } });
+  const luna = await prisma.mascota.findFirst({ where: { nombre: 'Luna' } });
+  const registradoPor = 'admin@huellitas.demo';
+  await prisma.mascota.update({ where: { id: toby.id }, data: { raza: 'Criollo', sexo: 'Macho', fechaNacimiento: diaUtc(sumarDias(hoy, -1200)) } });
+  await prisma.vacuna.createMany({
+    data: [
+      { mascotaId: toby.id, nombre: 'Rabia', aplicadaEn: diaUtc(sumarDias(hoy, -350)), proximaDosis: diaUtc(sumarDias(hoy, 15)), lote: 'RB-2231', registradoPor },
+      { mascotaId: toby.id, nombre: 'Moquillo y parvovirus', aplicadaEn: diaUtc(sumarDias(hoy, -40)), proximaDosis: diaUtc(sumarDias(hoy, 325)), lote: 'MP-1180', registradoPor },
+      { mascotaId: luna.id, nombre: 'Rabia', aplicadaEn: diaUtc(sumarDias(hoy, -400)), proximaDosis: diaUtc(sumarDias(hoy, -35)), lote: 'RB-2102', registradoPor },
+    ],
+  });
+  const citaLuna = await prisma.cita.findFirst({ where: { mascotaId: luna.id, estado: 'ATENDIDA' } });
+  await prisma.atencion.create({
+    data: { mascotaId: luna.id, citaId: citaLuna.id, fecha: citaLuna.inicio, motivo: 'Control después de cirugía', diagnostico: 'Cicatrización normal, sin signos de infección.', tratamiento: 'Retirar puntos en 7 días. Mantener el collar isabelino.', pesoKg: 18.4, temperaturaC: 38.5, registradoPor },
   });
 }
 

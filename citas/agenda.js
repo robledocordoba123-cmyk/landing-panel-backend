@@ -1,6 +1,7 @@
 // Lógica de la agenda. La usan la página, el panel y el asistente de WhatsApp,
 // para que las reglas sean las mismas sin importar por dónde llegue la cita.
 const { fechaLocal, finDe, horariosPosibles, instante, sumarDias } = require('./horario');
+const { asegurarMascota } = require('../clientes/mascotas');
 
 const MAX_CITAS_ACTIVAS = 3; // por correo, para que nadie llene la agenda
 
@@ -47,22 +48,27 @@ async function disponibilidad(prisma, servicio, fecha, ahora = new Date()) {
 // La restricción cita_sin_cruces de PostgreSQL rechaza la cita (código 23P01).
 const esCruce = (err) => /23P01|cita_sin_cruces/.test(err.message || '');
 
-async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, mascota, notas, origen = 'WEB' }, ahora = new Date()) {
+async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, mascota, especie, notas, origen = 'WEB' }, ahora = new Date()) {
   if (!servicio.reservable) throw new ErrorAgenda('Las urgencias se atienden sin cita: ven directamente.', 400);
 
   const permitido = horariosPosibles(fechaLocal(inicio), servicio.duracionMin, ahora).some((h) => h.getTime() === inicio.getTime());
   if (!permitido) throw new ErrorAgenda('Ese horario no está disponible. Elige otro, por favor.', 400);
 
-  const activas = await prisma.cita.count({ where: { email, estado: { in: ['PENDIENTE', 'CONFIRMADA'] }, inicio: { gt: ahora } } });
+  const activas = await prisma.cita.count({ where: { mascota: { cliente: { email } }, estado: { in: ['PENDIENTE', 'CONFIRMADA'] }, inicio: { gt: ahora } } });
   if (activas >= MAX_CITAS_ACTIVAS) throw new ErrorAgenda(`Ya tienes ${MAX_CITAS_ACTIVAS} citas pendientes con ese correo. Escríbenos si necesitas otra.`);
 
   try {
-    return await prisma.cita.create({
-      data: { servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin), nombre, email, telefono, mascota, notas, origen },
-      include: { servicio: true },
+    // Todo o nada: si el horario se pierde, no queda un cliente suelto.
+    return await prisma.$transaction(async (tx) => {
+      const { id: mascotaId } = await asegurarMascota(tx, { nombre, email, telefono, mascota, especie });
+      return tx.cita.create({
+        data: { servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin), mascotaId, notas, origen },
+        include: { servicio: true },
+      });
     });
   } catch (err) {
     if (esCruce(err)) throw new ErrorAgenda('Alguien acaba de reservar ese horario. Elige otro, por favor.');
+    if (err.code === 'P2002') throw new ErrorAgenda('Estamos guardando otra reserva con ese correo. Intenta de nuevo.');
     throw err;
   }
 }
@@ -85,7 +91,10 @@ function citasEntre(prisma, desde, hasta) {
   return prisma.cita.findMany({
     where: { inicio: { gte: instante(desde, 0), lt: instante(sumarDias(hasta, 1), 0) } },
     orderBy: { inicio: 'asc' },
-    include: { servicio: { select: { nombre: true, duracionMin: true } } },
+    include: {
+      servicio: { select: { nombre: true, duracionMin: true } },
+      mascota: { select: { id: true, nombre: true, especie: true, cliente: { select: { id: true, nombre: true, email: true, telefono: true } } } },
+    },
   });
 }
 

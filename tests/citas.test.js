@@ -14,7 +14,7 @@ function diaHabil() {
   return fecha;
 }
 
-const datos = (extra) => ({ nombre: 'Laura Gómez', email: 'laura@correo.com', telefono: '300 000 0001', mascota: 'Toby, perro', ...extra });
+const datos = (extra) => ({ nombre: 'Laura Gómez', email: 'laura@correo.com', telefono: '300 000 0001', mascota: 'Toby', especie: 'Perro', ...extra });
 
 let consulta;
 let vacuna;
@@ -34,12 +34,16 @@ beforeAll(async () => {
   token = (await request(app).post('/api/login').send(ADMIN)).body.token;
 });
 
-beforeEach(async () => {
+const limpiar = async () => {
   await prisma.cita.deleteMany();
-});
+  await prisma.mascota.deleteMany();
+  await prisma.cliente.deleteMany();
+};
+
+beforeEach(limpiar);
 
 afterAll(async () => {
-  await prisma.cita.deleteMany();
+  await limpiar();
   await prisma.$disconnect();
 });
 
@@ -159,6 +163,7 @@ describe('Reservar una cita', () => {
     expect((await reservar(datos({ ...base, email: 'sin-arroba' }))).status).toBe(400);
     expect((await reservar(datos({ ...base, telefono: '' }))).status).toBe(400);
     expect((await reservar(datos({ ...base, mascota: '' }))).status).toBe(400);
+    expect((await reservar(datos({ ...base, especie: 'Dragón' }))).status).toBe(400);
     expect((await reservar(datos({ ...base, inicio: 'mañana' }))).status).toBe(400);
   });
 
@@ -188,7 +193,7 @@ describe('Agenda del panel', () => {
     const res = await autorizado(request(app).get('/api/citas')).query({ desde: diaHabil() });
     expect(res.status).toBe(200);
     expect(res.body.citas.map((c) => c.id)).toEqual([id]);
-    expect(res.body.citas[0]).toMatchObject({ nombre: 'Laura Gómez', mascota: 'Toby, perro', servicio: { nombre: 'Consulta general' } });
+    expect(res.body.citas[0]).toMatchObject({ mascota: { nombre: 'Toby', cliente: { nombre: 'Laura Gómez' } }, servicio: { nombre: 'Consulta general' } });
   });
 
   test('rechaza rangos de fechas inválidos', async () => {

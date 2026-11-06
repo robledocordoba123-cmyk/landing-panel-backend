@@ -12,6 +12,12 @@ function diaHabil() {
   while (jornadaDe(fecha).abre !== 8 * 60) fecha = sumarDias(fecha, 1);
   return fecha;
 }
+async function ocuparHorario(fecha) {
+  const servicio = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
+  const cliente = await prisma.cliente.create({ data: { nombre: 'Otra', email: 'otra@correo.com', mascotas: { create: { nombre: 'Rex', especie: 'Perro' } } }, include: { mascotas: true } });
+  await prisma.cita.create({ data: { servicioId: servicio.id, recurso: servicio.recurso, inicio: instante(fecha, 8 * 60), fin: instante(fecha, 8 * 60 + 30), mascotaId: cliente.mascotas[0].id } });
+}
+
 const comoEnChat = (fecha) => `${fecha.slice(8)}/${fecha.slice(5, 7)}`;
 
 async function decir(texto, sesion = SIM) {
@@ -23,6 +29,8 @@ beforeEach(async () => {
   await prisma.conversacionBot.deleteMany();
   await prisma.mensaje.deleteMany();
   await prisma.cita.deleteMany();
+  await prisma.mascota.deleteMany();
+  await prisma.cliente.deleteMany();
 });
 
 afterAll(async () => {
@@ -58,9 +66,10 @@ describe('Asistente de WhatsApp: conversación', () => {
     expect(resumen).toMatch(/9:00 a\. m\./);
     expect(await decir('sí')).toMatch(/Reservé tu cita de \*Vacunación\*/);
 
-    const citas = await prisma.cita.findMany({ include: { servicio: true } });
+    const citas = await prisma.cita.findMany({ include: { servicio: true, mascota: { include: { cliente: true } } } });
     expect(citas).toHaveLength(1);
-    expect(citas[0]).toMatchObject({ nombre: 'Laura Gómez', email: 'laura@correo.com', mascota: 'Toby, perro', origen: 'WHATSAPP', estado: 'PENDIENTE' });
+    expect(citas[0]).toMatchObject({ origen: 'WHATSAPP', estado: 'PENDIENTE' });
+    expect(citas[0].mascota).toMatchObject({ nombre: 'Toby', especie: 'Perro', cliente: { nombre: 'Laura Gómez', email: 'laura@correo.com' } });
     expect(citas[0].servicio.nombre).toBe('Vacunación');
     expect(citas[0].inicio).toEqual(instante(fecha, 9 * 60));
   });
@@ -87,8 +96,7 @@ describe('Asistente de WhatsApp: conversación', () => {
 
   test('no ofrece un horario que ya está ocupado', async () => {
     const fecha = diaHabil();
-    const servicio = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
-    await prisma.cita.create({ data: { servicioId: servicio.id, recurso: servicio.recurso, inicio: instante(fecha, 8 * 60), fin: instante(fecha, 8 * 60 + 30), nombre: 'Otra', email: 'otra@correo.com', mascota: 'Rex' } });
+    await ocuparHorario(fecha);
     await decir('3');
     await decir('Sara');
     await decir('Kiwi, loro');
@@ -107,14 +115,13 @@ describe('Asistente de WhatsApp: conversación', () => {
     await decir(comoEnChat(fecha));
     await decir('1');
     await decir('sara@correo.com');
-    const servicio = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
-    await prisma.cita.create({ data: { servicioId: servicio.id, recurso: servicio.recurso, inicio: instante(fecha, 8 * 60), fin: instante(fecha, 8 * 60 + 30), nombre: 'Otra', email: 'otra@correo.com', mascota: 'Rex' } });
+    await ocuparHorario(fecha);
     expect(await decir('sí')).toMatch(/acaba de reservar.*Para qué día/s);
     expect(await decir(comoEnChat(fecha))).toMatch(/1\. 8:30 a\. m\./);
     await decir('1');
     await decir('sara@correo.com');
     expect(await decir('sí')).toMatch(/Reservé tu cita/);
-    expect(await prisma.cita.count({ where: { nombre: 'Sara' } })).toBe(1);
+    expect(await prisma.cita.count({ where: { mascota: { cliente: { nombre: 'Sara' } } } })).toBe(1);
   });
 
   test('"no" en la confirmación vuelve a empezar y "cancelar" funciona en cualquier paso', async () => {
