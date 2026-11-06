@@ -19,6 +19,7 @@ const vistaCliente = (cita, ahora) => ({
   servicioId: cita.servicioId,
   servicio: cita.servicio.nombre,
   mascota: cita.mascota.nombre,
+  especie: cita.mascota.especie,
   inicio: cita.inicio,
   fin: cita.fin,
   estado: cita.estado,
@@ -27,7 +28,7 @@ const vistaCliente = (cita, ahora) => ({
 
 async function citaDelToken(prisma, token) {
   const id = leerToken(token);
-  const cita = id && await prisma.cita.findUnique({ where: { id }, include: { servicio: true, mascota: { select: { nombre: true } } } });
+  const cita = id && await prisma.cita.findUnique({ where: { id }, include: { servicio: true, mascota: { select: { nombre: true, especie: true } } } });
   // El mismo mensaje para un código falso y una cita que no existe.
   if (!cita) throw new ErrorAgenda('Este enlace no es válido.', 404);
   return cita;
