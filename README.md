@@ -101,7 +101,9 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
   ```bash
   ADMIN_EMAIL=correo@negocio.co ADMIN_PASSWORD='una-clave-larga' npm run crear-admin
   ```
-- **Login sin pistas:** el mismo mensaje y un tiempo parecido exista o no el correo, con límite de intentos.
+- **Login sin pistas:** el mismo mensaje y un tiempo parecido exista o no el correo.
+- **Dos límites de intentos:** por IP y por cuenta. El de cuenta no depende de la IP, así que resiste aunque el atacante la cambie.
+- **`TRUST_PROXY`:** debe ser igual al número de proxies delante de la API; en esta demo son 4 (Vercel, Cloudflare, balanceador y proxy de Render). Con un número menor la API confunde la IP de Vercel con la del visitante. Riesgo conocido: quien llame directo a Render puede falsear la IP; con dominio propio se cierra ese acceso, y el límite por cuenta protege el login en cualquier caso.
 - Contraseñas con bcrypt, validación de todos los campos, encabezados con helmet y CSP en la web.
 - **Modo demo (`MODO_DEMO=true`):** las cuentas no se pueden cambiar, para que la demo pública siga funcionando.
 

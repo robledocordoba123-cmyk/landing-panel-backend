@@ -93,6 +93,17 @@ describe('Sesión', () => {
   });
 });
 
+describe('Límite de intentos', () => {
+  test('frena a quien ataca una cuenta, aunque cambie de IP, sin bloquear a las demás', async () => {
+    process.env.PROBAR_LIMITES = 'true';
+    const intento = (email) => request(app).post('/api/login').send({ email, password: 'mala' });
+    for (let i = 0; i < 10; i += 1) expect((await intento('victima@huellitas.test')).status).toBe(401);
+    expect((await intento('VICTIMA@huellitas.test ')).status).toBe(429);
+    expect((await intento('otra@huellitas.test')).status).toBe(401);
+    delete process.env.PROBAR_LIMITES;
+  });
+});
+
 describe('Roles', () => {
   test('recepción ve la ficha sin historia clínica; veterinario y administración sí', async () => {
     const { mascota } = await clienteConMascota();
