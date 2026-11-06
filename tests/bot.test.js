@@ -1,8 +1,18 @@
 const crypto = require('crypto');
 const request = require('supertest');
 const { app, prisma } = require('../app');
+const { interpretarFecha } = require('../bot/fechas');
+const { fechaLocal, instante, jornadaDe, sumarDias } = require('../citas/horario');
 
 const SIM = 'prueba-sesion-1234';
+
+// Primer día hábil normal a partir de dentro de 3 días, escrito como en el chat.
+function diaHabil() {
+  let fecha = sumarDias(fechaLocal(new Date()), 3);
+  while (jornadaDe(fecha).abre !== 8 * 60) fecha = sumarDias(fecha, 1);
+  return fecha;
+}
+const comoEnChat = (fecha) => `${fecha.slice(8)}/${fecha.slice(5, 7)}`;
 
 async function decir(texto, sesion = SIM) {
   const res = await request(app).post('/api/bot/simulador').send({ sesion, texto });
@@ -12,6 +22,7 @@ async function decir(texto, sesion = SIM) {
 beforeEach(async () => {
   await prisma.conversacionBot.deleteMany();
   await prisma.mensaje.deleteMany();
+  await prisma.cita.deleteMany();
 });
 
 afterAll(async () => {
@@ -31,30 +42,79 @@ describe('Asistente de WhatsApp: conversación', () => {
     expect(await decir('¿a qué hora abren el domingo?')).toMatch(/Domingos y festivos/);
   });
 
-  test('agenda una cita completa y la solicitud llega al panel marcada como WhatsApp', async () => {
+  test('reserva una cita completa con un horario real y queda en la agenda como WhatsApp', async () => {
+    const fecha = diaHabil();
     await decir('hola');
     await decir('3');
     await decir('Laura Gómez');
     await decir('Toby, perro');
-    await decir('2');
+    expect(await decir('2')).toMatch(/Para qué día/);
+    const horarios = await decir(comoEnChat(fecha));
+    expect(horarios).toMatch(/1\. 8:00 a\. m\./);
+    expect(await decir('3')).toMatch(/9:00 a\. m\./);
     const resumen = await decir('Laura@Correo.com');
     expect(resumen).toMatch(/Toby, perro/);
     expect(resumen).toMatch(/Vacunación/);
-    expect(await decir('sí')).toMatch(/Recibimos tu solicitud de \*Vacunación\*/);
+    expect(resumen).toMatch(/9:00 a\. m\./);
+    expect(await decir('sí')).toMatch(/Reservé tu cita de \*Vacunación\*/);
 
-    const solicitudes = await prisma.mensaje.findMany();
-    expect(solicitudes).toHaveLength(1);
-    expect(solicitudes[0]).toMatchObject({ nombre: 'Laura Gómez', email: 'laura@correo.com', mascota: 'Toby, perro', servicio: 'Vacunación', origen: 'WHATSAPP', estado: 'NUEVO' });
+    const citas = await prisma.cita.findMany({ include: { servicio: true } });
+    expect(citas).toHaveLength(1);
+    expect(citas[0]).toMatchObject({ nombre: 'Laura Gómez', email: 'laura@correo.com', mascota: 'Toby, perro', origen: 'WHATSAPP', estado: 'PENDIENTE' });
+    expect(citas[0].servicio.nombre).toBe('Vacunación');
+    expect(citas[0].inicio).toEqual(instante(fecha, 9 * 60));
   });
 
-  test('valida los datos: servicio que no existe y correo mal escrito', async () => {
+  test('valida los datos: servicio, fecha, horario y correo mal escritos', async () => {
     await decir('quiero una cita');
     await decir('Andrés');
     await decir('Misha, gata');
     expect(await decir('9')).toMatch(/No encontré ese servicio/);
     await decir('consulta');
+    expect(await decir('algún día')).toMatch(/No entendí la fecha/);
+    await decir(comoEnChat(diaHabil()));
+    expect(await decir('99')).toMatch(/Escribe el número del horario/);
+    await decir('1');
     expect(await decir('andres-sin-arroba')).toMatch(/no parece válido/);
-    expect(await prisma.mensaje.count()).toBe(0);
+    expect(await prisma.cita.count()).toBe(0);
+  });
+
+  test('las urgencias no aparecen como servicio para reservar', async () => {
+    await decir('3');
+    await decir('Sara');
+    expect(await decir('Kiwi, loro')).not.toMatch(/Urgencias/);
+  });
+
+  test('no ofrece un horario que ya está ocupado', async () => {
+    const fecha = diaHabil();
+    const servicio = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
+    await prisma.cita.create({ data: { servicioId: servicio.id, recurso: servicio.recurso, inicio: instante(fecha, 8 * 60), fin: instante(fecha, 8 * 60 + 30), nombre: 'Otra', email: 'otra@correo.com', mascota: 'Rex' } });
+    await decir('3');
+    await decir('Sara');
+    await decir('Kiwi, loro');
+    await decir('1');
+    const horarios = await decir(comoEnChat(fecha));
+    expect(horarios).not.toMatch(/8:00 a\. m\./);
+    expect(horarios).toMatch(/1\. 8:30 a\. m\./);
+  });
+
+  test('si alguien más toma el horario antes de confirmar, pide otra fecha sin perder lo demás', async () => {
+    const fecha = diaHabil();
+    await decir('3');
+    await decir('Sara');
+    await decir('Kiwi, loro');
+    await decir('1');
+    await decir(comoEnChat(fecha));
+    await decir('1');
+    await decir('sara@correo.com');
+    const servicio = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
+    await prisma.cita.create({ data: { servicioId: servicio.id, recurso: servicio.recurso, inicio: instante(fecha, 8 * 60), fin: instante(fecha, 8 * 60 + 30), nombre: 'Otra', email: 'otra@correo.com', mascota: 'Rex' } });
+    expect(await decir('sí')).toMatch(/acaba de reservar.*Para qué día/s);
+    expect(await decir(comoEnChat(fecha))).toMatch(/1\. 8:30 a\. m\./);
+    await decir('1');
+    await decir('sara@correo.com');
+    expect(await decir('sí')).toMatch(/Reservé tu cita/);
+    expect(await prisma.cita.count({ where: { nombre: 'Sara' } })).toBe(1);
   });
 
   test('"no" en la confirmación vuelve a empezar y "cancelar" funciona en cualquier paso', async () => {
@@ -65,9 +125,11 @@ describe('Asistente de WhatsApp: conversación', () => {
     await decir('Sara');
     await decir('Kiwi, loro');
     await decir('1');
+    await decir(comoEnChat(diaHabil()));
+    await decir('1');
     await decir('sara@correo.com');
     expect(await decir('no')).toMatch(/empecemos de nuevo/);
-    expect(await prisma.mensaje.count()).toBe(0);
+    expect(await prisma.cita.count()).toBe(0);
   });
 
   test('una urgencia avisa al equipo aunque esté a mitad de otra cosa', async () => {
@@ -152,5 +214,29 @@ describe('Asistente de WhatsApp: webhook de Meta', () => {
   test('sin configuración el webhook no existe', async () => {
     Object.keys(ENV).forEach((k) => delete process.env[k]);
     expect((await request(app).get('/webhook/whatsapp')).status).toBe(404);
+  });
+});
+
+describe('Fechas escritas en el chat', () => {
+  const hoy = '2026-11-05'; // jueves
+
+  test.each([
+    ['hoy', '2026-11-05'],
+    ['manana', '2026-11-06'],
+    ['pasado manana', '2026-11-07'],
+    ['el sabado', '2026-11-07'],
+    ['jueves', '2026-11-05'],
+    ['miercoles', '2026-11-11'],
+    ['15/11', '2026-11-15'],
+    ['15-11', '2026-11-15'],
+    ['15/11/2026', '2026-11-15'],
+    ['20 de noviembre', '2026-11-20'],
+    ['3/1', '2027-01-03'],
+  ])('"%s" es %s', (texto, esperado) => {
+    expect(interpretarFecha(texto, hoy)).toBe(esperado);
+  });
+
+  test.each(['31/02', '45/11', 'algun dia', '15 de brumario', ''])('"%s" no es una fecha', (texto) => {
+    expect(interpretarFecha(texto, hoy)).toBeNull();
   });
 });

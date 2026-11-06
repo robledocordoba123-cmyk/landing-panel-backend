@@ -40,3 +40,40 @@ model ConversacionBot {
   datos         Json     @default("{}")
   actualizadoEn DateTime @updatedAt
 }
+
+// Lo que ofrece la veterinaria. duracionMin define cuánto ocupa una cita y
+// recurso, qué se ocupa: consulta y vacunas comparten el consultorio, y la
+// peluquería tiene su propio espacio. Las urgencias no se reservan.
+model Servicio {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique
+  detalle     String
+  precioDesde Int
+  duracionMin Int
+  recurso     String // CONSULTORIO | PELUQUERIA
+  reservable  Boolean @default(true)
+  citas       Cita[]
+}
+
+// Cita con fecha y hora. La regla de que dos citas no se crucen la garantiza
+// PostgreSQL con la restricción cita_sin_cruces (ver la migración citas_reales).
+model Cita {
+  id            Int      @id @default(autoincrement())
+  servicio      Servicio @relation(fields: [servicioId], references: [id])
+  servicioId    Int
+  recurso       String
+  inicio        DateTime
+  fin           DateTime
+  estado        String   @default("PENDIENTE") // PENDIENTE | CONFIRMADA | ATENDIDA | NO_ASISTIO | CANCELADA
+  nombre        String
+  email         String
+  telefono      String?
+  mascota       String
+  notas         String?
+  origen        String   @default("WEB") // WEB | WHATSAPP
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([inicio])
+  @@index([email, estado])
+}

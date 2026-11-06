@@ -1,6 +1,6 @@
 # Huellitas Veterinaria · API (backend)
 
-API REST de la landing de Huellitas Veterinaria (negocio **ficticio**, proyecto de portafolio): recibe las solicitudes de cita del formulario público y las entrega a un panel privado con login.
+API REST de Huellitas Veterinaria (negocio **ficticio**, proyecto de portafolio): agenda de citas con horarios reales, panel privado con login y asistente de WhatsApp.
 
 **Demo en vivo:** [huellitas-veterinaria.vercel.app](https://huellitas-veterinaria.vercel.app) · API: [huellitas-api-s584.onrender.com](https://huellitas-api-s584.onrender.com) (plan gratis de Render: la primera petición puede tardar unos 50 segundos).
 
@@ -12,18 +12,35 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 
 | Método | Ruta | Descripción | Protegido |
 |---|---|---|---|
-| POST | `/api/mensajes` | Guarda una solicitud de cita (con validación y límite de envíos) | No |
-| GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista las solicitudes y el conteo por estado | Sí |
-| PATCH | `/api/mensajes/:id` | Marca una solicitud como atendida o la devuelve a nueva | Sí |
+| GET | `/api/servicios` | Servicios con duración y precio | No |
+| GET | `/api/disponibilidad?servicioId=&fecha=YYYY-MM-DD` | Horarios libres de un servicio ese día | No |
+| POST | `/api/citas` | Reserva una cita (con validación y límite de envíos) | No |
+| GET | `/api/citas?desde=&hasta=` | Citas de un rango de fechas | Sí |
+| PATCH | `/api/citas/:id/estado` | Cambia el estado de una cita | Sí |
+| POST | `/api/mensajes` | Guarda una pregunta de la página (con validación y límite de envíos) | No |
+| GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista los mensajes y el conteo por estado | Sí |
+| PATCH | `/api/mensajes/:id` | Marca un mensaje como atendido o lo devuelve a nuevo | Sí |
 | POST | `/api/login` | Inicia sesión y devuelve un token (máximo 10 intentos fallidos cada 15 min) | No |
+
+## Reglas de la agenda
+
+- **Sin cruces, garantizado por la base de datos.** La restricción `cita_sin_cruces` (`EXCLUDE USING gist`) impide que dos citas del mismo recurso se pisen, aunque dos personas reserven en el mismo instante. Una consulta previa no bastaría: entre revisar y guardar, otra persona podría tomar el horario. Hay una prueba con 8 reservas simultáneas.
+- **Recursos separados.** Consulta y vacunación comparten el consultorio; la peluquería tiene su propio espacio, así que puede coincidir con una consulta. Las urgencias no se reservan.
+- **Horario del negocio.** Lunes a sábado de 8:00 a. m. a 7:00 p. m.; domingos y festivos de Colombia de 9:00 a. m. a 2:00 p. m. Los festivos se calculan por año, con Semana Santa y Ley Emiliani (`citas/festivos.js`).
+- **Cada servicio tiene su duración.** Una cita debe terminar antes del cierre y los horarios empiezan cada 30 minutos.
+- **Anticipación.** Se reserva con mínimo 1 hora y máximo 60 días. Un mismo correo puede tener hasta 3 citas pendientes.
+- **Estados.** `PENDIENTE` → `CONFIRMADA` → `ATENDIDA` o `NO_ASISTIO`; se puede cancelar antes de atenderla, y cancelar libera el horario. Una cita no se marca atendida antes de su hora.
+- **Privacidad.** La disponibilidad solo devuelve horarios libres, nunca quién reservó.
+
+La página, el panel y el asistente usan la misma lógica (`citas/agenda.js`). Las fechas se guardan en UTC y se trabajan en hora de Colombia.
 
 ## Asistente de WhatsApp
 
 Bot que atiende a los clientes por WhatsApp (`bot/`):
 
-- Menú con servicios y precios, horarios y ubicación, **agendar cita** (pide nombre, mascota, servicio y correo, con validación) y **hablar con una persona**.
+- Menú con servicios y precios, horarios y ubicación, **reservar cita** (pide nombre, mascota y servicio, ofrece los horarios libres del día que la persona escriba y deja la cita en la agenda) y **hablar con una persona**.
 - Detecta urgencias ("envenenó", "no respira"…) y avisa al equipo de inmediato.
-- Las citas, urgencias y pedidos de atención humana se guardan como solicitudes con `origen = WHATSAPP` y aparecen en el panel.
+- Las citas llegan a la agenda con `origen = WHATSAPP`. Las urgencias y los pedidos de atención humana llegan a los mensajes del panel.
 - Recuerda la conversación (tabla `ConversacionBot`) aunque el servidor se reinicie; tras 30 minutos sin respuesta vuelve a empezar.
 - **IA opcional:** si se define `ANTHROPIC_API_KEY`, las preguntas libres las responde Claude con la información del negocio (`bot/negocio.js`) y sin dar diagnósticos. Sin clave, responde con sus reglas.
 
@@ -46,7 +63,7 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
 
 ## Pruebas
 
-20 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): formulario, login, panel, seguridad, conversación completa del bot, validaciones, urgencias, IA (simulada) y webhook de WhatsApp (verificación, firma falsa y envío de la respuesta).
+61 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest

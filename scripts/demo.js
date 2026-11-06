@@ -1,9 +1,10 @@
-// Datos de demostración: una cuenta del panel para la demo pública y algunas
-// solicitudes de ejemplo. Borra las solicitudes anteriores, así que nunca se
-// corre en un negocio real (exige DEMO=true).
+// Datos de demostración: una cuenta del panel para la demo pública, solicitudes
+// y citas de ejemplo. Borra las anteriores, así que nunca se corre en un negocio
+// real (exige DEMO=true).
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
+const { fechaLocal, finDe, instante, sumarDias } = require('../citas/horario');
 
 if (process.env.DEMO !== 'true') {
   console.error('Este script borra solicitudes. Córrelo solo en la demo, con DEMO=true.');
@@ -23,12 +24,38 @@ const ejemplos = [
   { nombre: 'Sara Muñoz', email: 'sara@ejemplo.com', mascota: 'Kiwi (loro)', servicio: 'Otro', mensaje: '¿Atienden aves? Mi loro tiene las plumas raras.', creadoEn: hace(72), estado: 'ATENDIDO', atendidoEn: hace(70) },
 ];
 
+// Citas alrededor de hoy, para que la agenda nunca se vea vacía. Las horas caben
+// también en la jornada corta de domingos y festivos (9:00 a. m. a 2:00 p. m.).
+const citasDeEjemplo = [
+  { dia: -1, hora: 9, servicio: 'Consulta general', nombre: 'Camilo Herrera', email: 'camilo@ejemplo.com', telefono: '300 000 0004', mascota: 'Luna (perra)', estado: 'ATENDIDA' },
+  { dia: -1, hora: 10, servicio: 'Vacunación', nombre: 'Sara Muñoz', email: 'sara@ejemplo.com', telefono: '300 000 0006', mascota: 'Nala (gata)', estado: 'NO_ASISTIO' },
+  { dia: 0, hora: 9, servicio: 'Vacunación', nombre: 'Laura Restrepo', email: 'laura@ejemplo.com', telefono: '300 000 0001', mascota: 'Toby (perro)', estado: 'CONFIRMADA', notas: 'Vacuna anual.' },
+  { dia: 0, hora: 10, servicio: 'Peluquería', nombre: 'Valentina Ríos', email: 'valentina@ejemplo.com', telefono: '300 000 0003', mascota: 'Coco (perro)', estado: 'CONFIRMADA' },
+  { dia: 0, hora: 11, servicio: 'Consulta general', nombre: 'Andrés Gómez', email: 'andres@ejemplo.com', telefono: '300 000 0002', mascota: 'Misha (gata)', estado: 'PENDIENTE', notas: 'No quiere comer desde ayer.' },
+  { dia: 1, hora: 9, servicio: 'Consulta general', nombre: 'Paola Arango', email: 'paola@ejemplo.com', telefono: '573000000005', mascota: 'Max (perro)', estado: 'PENDIENTE', origen: 'WHATSAPP' },
+  { dia: 1, hora: 11, servicio: 'Peluquería', nombre: 'Daniela Mejía', email: 'daniela@ejemplo.com', telefono: '300 000 0007', mascota: 'Rocky (perro)', estado: 'CONFIRMADA' },
+];
+
+async function crearCitasDeEjemplo() {
+  const servicios = await prisma.servicio.findMany();
+  const hoy = fechaLocal(new Date());
+  await prisma.cita.deleteMany();
+  await prisma.cita.createMany({
+    data: citasDeEjemplo.map(({ dia, hora, servicio: nombre, ...datos }) => {
+      const servicio = servicios.find((s) => s.nombre === nombre);
+      const inicio = instante(sumarDias(hoy, dia), hora * 60);
+      return { ...datos, servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin) };
+    }),
+  });
+}
+
 (async () => {
   const hash = await bcrypt.hash('Huellitas2026!', 10);
   await prisma.usuario.upsert({ where: { email: 'admin@huellitas.demo' }, update: { password: hash }, create: { email: 'admin@huellitas.demo', password: hash } });
   await prisma.conversacionBot.deleteMany();
   await prisma.mensaje.deleteMany();
   await prisma.mensaje.createMany({ data: ejemplos });
-  console.log(`Demo lista: ${ejemplos.length} solicitudes y la cuenta admin@huellitas.demo`);
+  await crearCitasDeEjemplo();
+  console.log(`Demo lista: ${ejemplos.length} solicitudes, ${citasDeEjemplo.length} citas y la cuenta admin@huellitas.demo`);
   await prisma.$disconnect();
 })();
