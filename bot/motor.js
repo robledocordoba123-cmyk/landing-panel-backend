@@ -8,6 +8,8 @@ const { interpretarFecha } = require('./fechas');
 const { ErrorAgenda, crearCita, disponibilidad } = require('../citas/agenda');
 const { fechaLegible, fechaLocal, horaLegible, jornadaDe } = require('../citas/horario');
 const { leerMascota } = require('../clientes/mascotas');
+const { avisar } = require('../avisos/avisos');
+const { enlaceCita } = require('../avisos/enlace');
 
 const MINUTOS_SIN_RESPUESTA = 30; // después de esto, la conversación vuelve a empezar
 const HORARIOS_A_OFRECER = 8; // para que la lista quepa bien en el chat
@@ -147,17 +149,19 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
     if (/^(si|sí|s|ok|dale|listo|confirmo)/.test(t)) {
       const servicio = await prisma.servicio.findUnique({ where: { id: datos.servicioId } });
       const inicio = new Date(datos.inicio);
+      let cita;
       try {
         const { nombre: mascota, especie } = leerMascota(datos.mascota);
-        await crearCita(prisma, { servicio, inicio, nombre: datos.nombre, email: datos.email, telefono, mascota, especie, origen: 'WHATSAPP' });
+        cita = await crearCita(prisma, { servicio, inicio, nombre: datos.nombre, email: datos.email, telefono, mascota, especie, origen: 'WHATSAPP' });
       } catch (err) {
         if (!(err instanceof ErrorAgenda)) throw err;
         const { inicio: _inicio, ...resto } = datos;
         return responder([err.message, PREGUNTA_FECHA], 'CITA_FECHA', resto);
       }
+      await avisar(prisma, 'RESERVA', cita.id);
       return responder([
         `¡Listo! ✅ Reservé tu cita de *${datos.servicio}* para ${datos.mascota}: *${fechaLegible(inicio)}* a las *${horaLegible(inicio)}*.`,
-        'El equipo la confirmará pronto. Si necesitas algo más, escribe *menú*.',
+        `El equipo la confirmará pronto. Si necesitas cancelarla o cambiarla, usa este enlace: ${enlaceCita(cita.id)}`,
       ]);
     }
     if (/^(no|n)$/.test(t)) {

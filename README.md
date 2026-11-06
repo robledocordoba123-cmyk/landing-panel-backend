@@ -25,6 +25,12 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | POST | `/api/mascotas/:id/vacunas` | Registra una vacuna | Sí |
 | DELETE | `/api/vacunas/:id` | Borra una vacuna mal registrada | Sí |
 | GET | `/api/vacunas/por-vencer` | Vacunas vencidas o que vencen en 30 días | Sí |
+| GET | `/api/mi-cita/:token` | El cliente ve su cita con el enlace | No (enlace firmado) |
+| POST | `/api/mi-cita/:token/cancelar` | El cliente cancela su cita | No (enlace firmado) |
+| POST | `/api/mi-cita/:token/cambiar` | El cliente cambia la fecha | No (enlace firmado) |
+| GET | `/api/notificaciones` | Registro de correos | Sí |
+| POST | `/api/recordatorios` | Envía los recordatorios de mañana | Sí |
+| POST | `/api/tareas/recordatorios` | Lo mismo, para la tarea diaria | Token de tarea |
 | POST | `/api/mensajes` | Guarda una pregunta de la página (con validación y límite de envíos) | No |
 | GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista los mensajes y el conteo por estado | Sí |
 | PATCH | `/api/mensajes/:id` | Marca un mensaje como atendido o lo devuelve a nuevo | Sí |
@@ -49,6 +55,15 @@ La página, el panel y el asistente usan la misma lógica (`citas/agenda.js`). L
 - **Todo o nada.** El cliente, la mascota y la cita se guardan en una transacción: si el horario se pierde, no queda un cliente suelto. Atender una cita guarda la historia y marca la cita en una sola operación.
 - **Historia clínica:** motivo, peso, temperatura, diagnóstico, tratamiento y quién lo registró.
 - **Carné de vacunas:** se imprime desde la ficha. El panel avisa las vacunas vencidas o que vencen en 30 días; si la mascota ya recibió una dosis más reciente de la misma vacuna, la anterior deja de avisar.
+
+## Correos y enlace del cliente
+
+- **Enlace sin cuenta.** Cada cita tiene un enlace firmado con HMAC: no se puede adivinar, no sirve para otra cita y muestra solo lo necesario, nunca el correo ni el teléfono.
+- **Cancelar o cambiar hasta 2 horas antes.** Al cambiar, la cita vuelve a pendiente para que el equipo confirme la nueva hora. La regla de no cruzarse sigue en la base de datos.
+- **Correos:** reserva recibida, confirmación, cambio, cancelación y recordatorio un día antes. Cada uno queda registrado con su resultado.
+- **Un correo que falla no daña la reserva.** Y el recordatorio fallido se reintenta; el que ya salió no se repite.
+- **Recordatorio diario** con GitHub Actions (`recordatorios.yml`), porque en el plan gratis el servidor se apaga sin visitas. Es opcional: se activa con el secreto `TAREAS_TOKEN`.
+- **La demo pública no envía correos.** Sin `BREVO_API_KEY` quedan como `SIMULADA`. Es a propósito: en una página abierta, cualquiera podría escribir un correo ajeno y hacer que la API le escriba.
 
 ## Asistente de WhatsApp
 
@@ -79,7 +94,7 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
 
 ## Pruebas
 
-86 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+107 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest

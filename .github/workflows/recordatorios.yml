@@ -1,0 +1,25 @@
+# Cada día a las 8:00 a. m. de Colombia pide a la API enviar los recordatorios de
+# las citas de mañana. Es opcional: sin el secreto TAREAS_TOKEN no hace nada.
+# Va aparte de la API porque en el plan gratis el servidor se apaga sin visitas.
+name: Recordatorios de citas
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+jobs:
+  recordatorios:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar recordatorios
+        env:
+          TAREAS_TOKEN: ${{ secrets.TAREAS_TOKEN }}
+        run: |
+          if [ -z "$TAREAS_TOKEN" ]; then
+            echo "Sin TAREAS_TOKEN: no se envía nada."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 150 --retry 2 --retry-delay 20 \
+            -X POST -H "x-tarea-token: $TAREAS_TOKEN" \
+            https://huellitas-api-s584.onrender.com/api/tareas/recordatorios
