@@ -65,15 +65,75 @@ model Cita {
   inicio        DateTime
   fin           DateTime
   estado        String   @default("PENDIENTE") // PENDIENTE | CONFIRMADA | ATENDIDA | NO_ASISTIO | CANCELADA
-  nombre        String
-  email         String
-  telefono      String?
-  mascota       String
+  mascota       Mascota  @relation(fields: [mascotaId], references: [id])
+  mascotaId     Int
+  atencion      Atencion?
   notas         String?
   origen        String   @default("WEB") // WEB | WHATSAPP
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 
   @@index([inicio])
-  @@index([email, estado])
+  @@index([mascotaId])
+}
+
+// Quien reserva. El correo lo identifica, para reunir sus citas y mascotas.
+model Cliente {
+  id       Int       @id @default(autoincrement())
+  nombre   String
+  email    String    @unique
+  telefono String?
+  creadoEn DateTime  @default(now())
+  mascotas Mascota[]
+}
+
+model Mascota {
+  id              Int        @id @default(autoincrement())
+  cliente         Cliente    @relation(fields: [clienteId], references: [id])
+  clienteId       Int
+  nombre          String
+  especie         String // Perro | Gato | Ave | Conejo | Otro
+  raza            String?
+  sexo            String? // Macho | Hembra
+  fechaNacimiento DateTime?  @db.Date
+  notas           String?
+  creadoEn        DateTime   @default(now())
+  citas           Cita[]
+  atenciones      Atencion[]
+  vacunas         Vacuna[]
+
+  @@index([clienteId])
+}
+
+// Entrada de la historia clínica. Si viene de una cita, cada cita tiene una sola.
+model Atencion {
+  id            Int      @id @default(autoincrement())
+  mascota       Mascota  @relation(fields: [mascotaId], references: [id], onDelete: Cascade)
+  mascotaId     Int
+  cita          Cita?    @relation(fields: [citaId], references: [id], onDelete: SetNull)
+  citaId        Int?     @unique
+  fecha         DateTime @default(now())
+  motivo        String
+  diagnostico   String?
+  tratamiento   String?
+  pesoKg        Float?
+  temperaturaC  Float?
+  registradoPor String
+
+  @@index([mascotaId, fecha])
+}
+
+// Carné de vacunas: cada dosis aplicada y cuándo toca la siguiente.
+model Vacuna {
+  id            Int       @id @default(autoincrement())
+  mascota       Mascota   @relation(fields: [mascotaId], references: [id], onDelete: Cascade)
+  mascotaId     Int
+  nombre        String
+  aplicadaEn    DateTime  @db.Date
+  proximaDosis  DateTime? @db.Date
+  lote          String?
+  registradoPor String
+
+  @@index([mascotaId])
+  @@index([proximaDosis])
 }

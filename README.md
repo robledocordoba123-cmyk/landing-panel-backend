@@ -17,6 +17,14 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | POST | `/api/citas` | Reserva una cita (con validación y límite de envíos) | No |
 | GET | `/api/citas?desde=&hasta=` | Citas de un rango de fechas | Sí |
 | PATCH | `/api/citas/:id/estado` | Cambia el estado de una cita | Sí |
+| GET | `/api/clientes?q=` | Busca clientes por nombre, teléfono, correo o mascota | Sí |
+| GET, PATCH | `/api/clientes/:id` | Ver o corregir un cliente | Sí |
+| POST | `/api/clientes/:id/mascotas` | Agrega una mascota | Sí |
+| GET, PATCH | `/api/mascotas/:id` | Ficha completa (cliente, historia, vacunas y citas) o corregir datos | Sí |
+| POST | `/api/mascotas/:id/atenciones` | Registra una atención; con `citaId` marca la cita como atendida | Sí |
+| POST | `/api/mascotas/:id/vacunas` | Registra una vacuna | Sí |
+| DELETE | `/api/vacunas/:id` | Borra una vacuna mal registrada | Sí |
+| GET | `/api/vacunas/por-vencer` | Vacunas vencidas o que vencen en 30 días | Sí |
 | POST | `/api/mensajes` | Guarda una pregunta de la página (con validación y límite de envíos) | No |
 | GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista los mensajes y el conteo por estado | Sí |
 | PATCH | `/api/mensajes/:id` | Marca un mensaje como atendido o lo devuelve a nuevo | Sí |
@@ -33,6 +41,14 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 - **Privacidad.** La disponibilidad solo devuelve horarios libres, nunca quién reservó.
 
 La página, el panel y el asistente usan la misma lógica (`citas/agenda.js`). Las fechas se guardan en UTC y se trabajan en hora de Colombia.
+
+## Clientes, mascotas e historia clínica
+
+- **El cliente se crea solo al reservar** y el correo lo identifica. Con el mismo correo y la misma mascota no se duplica nada, aunque cambien las mayúsculas.
+- **Reservar es público, así que una reserva nunca cambia los datos de un cliente que ya existe.** Solo el equipo puede corregirlos desde el panel.
+- **Todo o nada.** El cliente, la mascota y la cita se guardan en una transacción: si el horario se pierde, no queda un cliente suelto. Atender una cita guarda la historia y marca la cita en una sola operación.
+- **Historia clínica:** motivo, peso, temperatura, diagnóstico, tratamiento y quién lo registró.
+- **Carné de vacunas:** se imprime desde la ficha. El panel avisa las vacunas vencidas o que vencen en 30 días; si la mascota ya recibió una dosis más reciente de la misma vacuna, la anterior deja de avisar.
 
 ## Asistente de WhatsApp
 
@@ -63,7 +79,7 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
 
 ## Pruebas
 
-61 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+86 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest
