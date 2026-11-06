@@ -6,6 +6,7 @@ const { fechaLocal, fechaValida, horaLegible, jornadaDe, sumarDias } = require('
 const { ESPECIES } = require('../clientes/mascotas');
 const { avisar } = require('../avisos/avisos');
 const { crearToken } = require('../avisos/enlace');
+const { registrar } = require('../seguridad/bitacora');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DIAS_MAX_CONSULTA = 31;
@@ -22,6 +23,7 @@ function validarReserva(cuerpo) {
   if (!ESPECIES.includes(cuerpo.especie)) return 'Elige qué animal es tu mascota.';
   if (texto(cuerpo.notas).length > 500) return 'La nota es muy larga (máximo 500 letras).';
   if (!Number.isInteger(cuerpo.servicioId)) return 'Elige un servicio.';
+  if (cuerpo.autorizaDatos !== true) return 'Debes autorizar el tratamiento de tus datos para reservar.';
   if (typeof cuerpo.inicio !== 'string' || Number.isNaN(new Date(cuerpo.inicio).getTime())) return 'Elige un horario.';
   return null;
 }
@@ -76,6 +78,7 @@ function crearRutasCitas(prisma, verificarToken) {
         mascota: texto(cuerpo.mascota),
         especie: cuerpo.especie,
         notas: texto(cuerpo.notas) || null,
+        ip: req.ip,
       });
       await avisar(prisma, 'RESERVA', cita.id);
       res.status(201).json(citaPublica(cita));
@@ -103,6 +106,7 @@ function crearRutasCitas(prisma, verificarToken) {
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Datos no válidos' });
     try {
       const cita = await cambiarEstado(prisma, id, req.body?.estado);
+      await registrar(prisma, req, 'CITA_ESTADO', { entidad: 'Cita', entidadId: id, detalle: cita.estado });
       if (['CONFIRMADA', 'CANCELADA'].includes(cita.estado)) await avisar(prisma, cita.estado, id);
       res.json(cita);
     } catch (err) {

@@ -1,12 +1,12 @@
 const request = require('supertest');
-const bcrypt = require('bcrypt');
 const { app, prisma } = require('../app');
+const { sesionDe } = require('./ayuda');
 const { crearToken, leerToken, enlaceCita } = require('../avisos/enlace');
 const { enviarRecordatorios } = require('../avisos/avisos');
 const { plantilla } = require('../avisos/plantillas');
 const { fechaLocal, instante, jornadaDe, sumarDias } = require('../citas/horario');
 
-const ADMIN = { email: 'avisos@huellitas.test', password: 'clave-de-pruebas' };
+const ADMIN = { email: 'avisos@huellitas.test', rol: 'ADMIN' };
 
 function diaHabil(desde = 3) {
   let fecha = sumarDias(fechaLocal(new Date()), desde);
@@ -17,7 +17,7 @@ function diaHabil(desde = 3) {
 let tokenPanel;
 let consulta;
 
-const conSesion = (r) => r.set('Authorization', `Bearer ${tokenPanel}`);
+const conSesion = (r) => r.set('Cookie', tokenPanel);
 const reservar = (extra) => request(app).post('/api/citas').send({
   servicioId: consulta.id,
   inicio: instante(diaHabil(), 9 * 60).toISOString(),
@@ -26,6 +26,7 @@ const reservar = (extra) => request(app).post('/api/citas').send({
   telefono: '300 000 0001',
   mascota: 'Toby',
   especie: 'Perro',
+  autorizaDatos: true,
   ...extra,
 });
 
@@ -43,9 +44,7 @@ async function citaEn(inicio, estado = 'CONFIRMADA') {
 
 beforeAll(async () => {
   consulta = await prisma.servicio.findUnique({ where: { nombre: 'Consulta general' } });
-  await prisma.usuario.deleteMany({ where: { email: ADMIN.email } });
-  await prisma.usuario.create({ data: { email: ADMIN.email, password: await bcrypt.hash(ADMIN.password, 4) } });
-  tokenPanel = (await request(app).post('/api/login').send(ADMIN)).body.token;
+  tokenPanel = await sesionDe(prisma, ADMIN);
 });
 
 beforeEach(limpiar);

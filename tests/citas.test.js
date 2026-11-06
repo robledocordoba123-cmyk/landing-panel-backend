@@ -1,11 +1,11 @@
 const request = require('supertest');
-const bcrypt = require('bcrypt');
 const { app, prisma } = require('../app');
+const { sesionDe } = require('./ayuda');
 const { festivosDelAnio, esFestivo } = require('../citas/festivos');
 const { fechaLocal, fechaValida, horariosPosibles, instante, jornadaDe, sumarDias, horaLegible } = require('../citas/horario');
 const { cambiarEstado } = require('../citas/agenda');
 
-const ADMIN = { email: 'agenda@huellitas.test', password: 'clave-de-pruebas' };
+const ADMIN = { email: 'agenda@huellitas.test', rol: 'ADMIN' };
 
 // Primer día hábil normal (ni domingo ni festivo) a partir de dentro de 3 días.
 function diaHabil() {
@@ -14,7 +14,7 @@ function diaHabil() {
   return fecha;
 }
 
-const datos = (extra) => ({ nombre: 'Laura Gómez', email: 'laura@correo.com', telefono: '300 000 0001', mascota: 'Toby', especie: 'Perro', ...extra });
+const datos = (extra) => ({ nombre: 'Laura Gómez', email: 'laura@correo.com', telefono: '300 000 0001', mascota: 'Toby', especie: 'Perro', autorizaDatos: true, ...extra });
 
 let consulta;
 let vacuna;
@@ -29,9 +29,7 @@ beforeAll(async () => {
   vacuna = por('Vacunación');
   peluqueria = por('Peluquería');
   urgencias = por('Urgencias');
-  await prisma.usuario.deleteMany({ where: { email: ADMIN.email } });
-  await prisma.usuario.create({ data: { email: ADMIN.email, password: await bcrypt.hash(ADMIN.password, 4) } });
-  token = (await request(app).post('/api/login').send(ADMIN)).body.token;
+  token = await sesionDe(prisma, ADMIN);
 });
 
 const limpiar = async () => {
@@ -49,7 +47,7 @@ afterAll(async () => {
 
 const reservar = (cuerpo) => request(app).post('/api/citas').send(cuerpo);
 const libres = async (servicioId, fecha) => (await request(app).get('/api/disponibilidad').query({ servicioId, fecha })).body.horarios;
-const autorizado = (r) => r.set('Authorization', `Bearer ${token}`);
+const autorizado = (r) => r.set('Cookie', token);
 
 describe('Festivos de Colombia', () => {
   test('calcula los 18 festivos de 2026', () => {

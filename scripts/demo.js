@@ -13,6 +13,11 @@ if (process.env.DEMO !== 'true') {
 }
 
 const prisma = new PrismaClient();
+const CUENTAS_DEMO = [
+  { email: 'admin@huellitas.demo', nombre: 'Sofía Vélez', rol: 'ADMIN' },
+  { email: 'vet@huellitas.demo', nombre: 'Dr. Mateo Ríos', rol: 'VETERINARIO' },
+  { email: 'recepcion@huellitas.demo', nombre: 'Juliana Arias', rol: 'RECEPCION' },
+];
 const HORA = 60 * 60 * 1000;
 const hace = (horas) => new Date(Date.now() - horas * HORA);
 
@@ -75,7 +80,10 @@ async function crearCitasDeEjemplo() {
 
 (async () => {
   const hash = await bcrypt.hash('Huellitas2026!', 10);
-  await prisma.usuario.upsert({ where: { email: 'admin@huellitas.demo' }, update: { password: hash }, create: { email: 'admin@huellitas.demo', password: hash } });
+  // Una cuenta por rol, para probar lo que ve cada quien.
+  for (const cuenta of CUENTAS_DEMO) {
+    await prisma.usuario.upsert({ where: { email: cuenta.email }, update: { ...cuenta, password: hash, activo: true }, create: { ...cuenta, password: hash } });
+  }
   await prisma.conversacionBot.deleteMany();
   await prisma.mensaje.deleteMany();
   await prisma.mensaje.createMany({ data: ejemplos });

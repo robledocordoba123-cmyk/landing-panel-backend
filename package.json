@@ -8,7 +8,7 @@
     "dev": "node --watch index.js",
     "crear-admin": "node scripts/crear-admin.js",
     "demo": "node scripts/demo.js",
-    "start:demo": "prisma migrate deploy && DEMO=true node scripts/demo.js && node index.js",
+    "start:demo": "prisma migrate deploy && DEMO=true node scripts/demo.js && MODO_DEMO=true node index.js",
     "pretest": "node tests/preparar-bd.js",
     "test": "jest --runInBand"
   },
@@ -19,6 +19,7 @@
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.1",
