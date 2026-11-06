@@ -98,4 +98,4 @@ function citasEntre(prisma, desde, hasta) {
   });
 }
 
-module.exports = { ErrorAgenda, ESTADOS, TRANSICIONES, MAX_CITAS_ACTIVAS, disponibilidad, crearCita, cambiarEstado, citasEntre };
+module.exports = { ErrorAgenda, ESTADOS, TRANSICIONES, MAX_CITAS_ACTIVAS, disponibilidad, crearCita, cambiarEstado, citasEntre, esCruce };

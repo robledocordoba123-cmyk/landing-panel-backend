@@ -69,6 +69,8 @@ model Cita {
   mascotaId     Int
   atencion      Atencion?
   notas         String?
+  recordatorioEn DateTime?
+  notificaciones Notificacion[]
   origen        String   @default("WEB") // WEB | WHATSAPP
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
@@ -136,4 +138,21 @@ model Vacuna {
 
   @@index([mascotaId])
   @@index([proximaDosis])
+}
+
+// Cada correo que la API intenta enviar. ENVIADA salió por Brevo; SIMULADA no
+// salió porque no hay clave (la demo pública); FALLIDA no se pudo enviar.
+model Notificacion {
+  id           Int      @id @default(autoincrement())
+  cita         Cita     @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  citaId       Int
+  tipo         String // RESERVA | CONFIRMADA | REPROGRAMADA | RECORDATORIO | CANCELADA
+  destinatario String
+  asunto       String
+  estado       String // ENVIADA | SIMULADA | FALLIDA
+  detalle      String?
+  creadoEn     DateTime @default(now())
+
+  @@index([citaId])
+  @@index([creadoEn])
 }

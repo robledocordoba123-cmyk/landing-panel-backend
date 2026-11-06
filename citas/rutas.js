@@ -4,6 +4,8 @@ const rateLimit = require('express-rate-limit');
 const { ErrorAgenda, cambiarEstado, citasEntre, crearCita, disponibilidad } = require('./agenda');
 const { fechaLocal, fechaValida, horaLegible, jornadaDe, sumarDias } = require('./horario');
 const { ESPECIES } = require('../clientes/mascotas');
+const { avisar } = require('../avisos/avisos');
+const { crearToken } = require('../avisos/enlace');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DIAS_MAX_CONSULTA = 31;
@@ -24,7 +26,7 @@ function validarReserva(cuerpo) {
   return null;
 }
 
-const citaPublica = (c) => ({ id: c.id, servicio: c.servicio.nombre, inicio: c.inicio, fin: c.fin, estado: c.estado });
+const citaPublica = (c) => ({ id: c.id, servicio: c.servicio.nombre, inicio: c.inicio, fin: c.fin, estado: c.estado, token: crearToken(c.id) });
 
 function responderError(res, err, mensaje) {
   if (err instanceof ErrorAgenda) return res.status(err.estado).json({ error: err.message });
@@ -75,6 +77,7 @@ function crearRutasCitas(prisma, verificarToken) {
         especie: cuerpo.especie,
         notas: texto(cuerpo.notas) || null,
       });
+      await avisar(prisma, 'RESERVA', cita.id);
       res.status(201).json(citaPublica(cita));
     } catch (err) {
       responderError(res, err, 'No se pudo guardar la cita');
@@ -99,7 +102,9 @@ function crearRutasCitas(prisma, verificarToken) {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Datos no válidos' });
     try {
-      res.json(await cambiarEstado(prisma, id, req.body?.estado));
+      const cita = await cambiarEstado(prisma, id, req.body?.estado);
+      if (['CONFIRMADA', 'CANCELADA'].includes(cita.estado)) await avisar(prisma, cita.estado, id);
+      res.json(cita);
     } catch (err) {
       responderError(res, err, 'No se pudo actualizar la cita');
     }
