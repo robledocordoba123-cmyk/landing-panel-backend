@@ -23,5 +23,6 @@ function urlWeb() {
 }
 
 const enlaceCita = (id) => `${urlWeb()}/mi-cita/${crearToken(id)}`;
+const enlacePolitica = () => `${urlWeb()}/privacidad`;
 
-module.exports = { crearToken, leerToken, enlaceCita };
+module.exports = { crearToken, leerToken, enlaceCita, enlacePolitica };

@@ -24,12 +24,13 @@ async function detalleCliente(prisma, id) {
   return cliente;
 }
 
-async function fichaMascota(prisma, id) {
+// La historia clínica solo se incluye para quien tiene permiso de leerla.
+async function fichaMascota(prisma, id, { conHistoria }) {
   const mascota = await prisma.mascota.findUnique({
     where: { id },
     include: {
       cliente: true,
-      atenciones: { orderBy: { fecha: 'desc' } },
+      ...(conHistoria ? { atenciones: { orderBy: { fecha: 'desc' } } } : {}),
       vacunas: { orderBy: { aplicadaEn: 'desc' } },
       citas: { orderBy: { inicio: 'desc' }, take: 10, include: { servicio: { select: { nombre: true } } } },
     },
@@ -61,6 +62,25 @@ async function registrarVacuna(prisma, mascotaId, datos, registradoPor) {
   return prisma.vacuna.create({ data: { ...datos, mascotaId, registradoPor } });
 }
 
+// Derecho de supresión (Ley 1581): borra los datos de la persona y cancela sus
+// citas futuras. La historia de la mascota se conserva porque la ley exige
+// guardar los registros clínicos; sin datos de contacto ya no identifica a nadie.
+async function suprimirCliente(prisma, id, ahora = new Date()) {
+  await prisma.$transaction(async (tx) => {
+    const cliente = await tx.cliente.findUnique({ where: { id } });
+    if (!cliente) throw new ErrorAgenda('El cliente no existe', 404);
+    if (cliente.anonimizadoEn) throw new ErrorAgenda('Los datos de este cliente ya fueron suprimidos.');
+    const correoAnonimo = `suprimido-${id}@datos.invalid`;
+    await tx.cliente.update({ where: { id }, data: { nombre: 'Datos suprimidos', email: correoAnonimo, telefono: null, anonimizadoEn: ahora } });
+    await tx.mensaje.deleteMany({ where: { email: cliente.email } });
+    await tx.notificacion.updateMany({ where: { destinatario: cliente.email }, data: { destinatario: correoAnonimo } });
+    await tx.cita.updateMany({
+      where: { mascota: { clienteId: id }, inicio: { gt: ahora }, estado: { in: ['PENDIENTE', 'CONFIRMADA'] } },
+      data: { estado: 'CANCELADA' },
+    });
+  });
+}
+
 // Vacunas vencidas o que vencen pronto. Si la mascota ya recibió una dosis más
 // reciente de la misma vacuna, la anterior deja de contar.
 async function vacunasPorVencer(prisma, dias, ahora = new Date()) {
@@ -79,4 +99,4 @@ async function vacunasPorVencer(prisma, dias, ahora = new Date()) {
   return candidatas.filter((v) => !todas.some((o) => mismaVacuna(o, v) && o.aplicadaEn > v.aplicadaEn));
 }
 
-module.exports = { buscarClientes, detalleCliente, fichaMascota, registrarAtencion, registrarVacuna, vacunasPorVencer };
+module.exports = { buscarClientes, detalleCliente, fichaMascota, registrarAtencion, registrarVacuna, suprimirCliente, vacunasPorVencer };

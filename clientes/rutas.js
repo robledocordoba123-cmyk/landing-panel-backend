@@ -4,11 +4,14 @@ const express = require('express');
 const { ErrorAgenda } = require('../citas/agenda');
 const { fechaLocal, fechaValida } = require('../citas/horario');
 const { ESPECIES } = require('./mascotas');
-const { buscarClientes, detalleCliente, fichaMascota, registrarAtencion, registrarVacuna, vacunasPorVencer } = require('./ficha');
+const { buscarClientes, detalleCliente, fichaMascota, registrarAtencion, registrarVacuna, suprimirCliente, vacunasPorVencer } = require('./ficha');
+const { exigirRol, soloFueraDeDemo } = require('../seguridad/sesion');
+const { registrar } = require('../seguridad/bitacora');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEXOS = ['Macho', 'Hembra'];
 const DIAS_AVISO = 30;
+const CLINICA = ['ADMIN', 'VETERINARIO'];
 
 const texto = (v) => (typeof v === 'string' ? v.trim() : '');
 const opcional = (v) => texto(v) || null;
@@ -90,11 +93,19 @@ function crearRutasClientes(prisma, verificarToken) {
     res.json(await detalleCliente(prisma, id));
   }));
 
-  rutas.patch('/clientes/:id', manejar(async (req, res, id) => {
+  rutas.patch('/clientes/:id', exigirRol('ADMIN', 'RECEPCION'), manejar(async (req, res, id) => {
     const error = validarCliente(req.body || {});
     if (error) return res.status(400).json({ error });
     const { nombre, email, telefono } = req.body;
-    res.json(await prisma.cliente.update({ where: { id }, data: { nombre: texto(nombre), email: texto(email).toLowerCase(), telefono: opcional(telefono) } }));
+    const cliente = await prisma.cliente.update({ where: { id }, data: { nombre: texto(nombre), email: texto(email).toLowerCase(), telefono: opcional(telefono) } });
+    await registrar(prisma, req, 'CLIENTE_EDITADO', { entidad: 'Cliente', entidadId: id });
+    res.json(cliente);
+  }));
+
+  rutas.post('/clientes/:id/suprimir', exigirRol('ADMIN'), soloFueraDeDemo, manejar(async (req, res, id) => {
+    await suprimirCliente(prisma, id);
+    await registrar(prisma, req, 'DATOS_SUPRIMIDOS', { entidad: 'Cliente', entidadId: id });
+    res.json({ ok: true });
   }));
 
   rutas.post('/clientes/:id/mascotas', manejar(async (req, res, id) => {
@@ -105,7 +116,10 @@ function crearRutasClientes(prisma, verificarToken) {
   }));
 
   rutas.get('/mascotas/:id', manejar(async (req, res, id) => {
-    res.json(await fichaMascota(prisma, id));
+    const conHistoria = CLINICA.includes(req.usuario.rol);
+    const ficha = await fichaMascota(prisma, id, { conHistoria });
+    if (conHistoria) await registrar(prisma, req, 'HISTORIA_VISTA', { entidad: 'Mascota', entidadId: id });
+    res.json(ficha);
   }));
 
   rutas.patch('/mascotas/:id', manejar(async (req, res, id) => {
@@ -114,7 +128,7 @@ function crearRutasClientes(prisma, verificarToken) {
     res.json(await prisma.mascota.update({ where: { id }, data: datosMascota(req.body) }));
   }));
 
-  rutas.post('/mascotas/:id/atenciones', manejar(async (req, res, id) => {
+  rutas.post('/mascotas/:id/atenciones', exigirRol(...CLINICA), manejar(async (req, res, id) => {
     const a = req.body || {};
     const error = validarAtencion(a);
     if (error) return res.status(400).json({ error });
@@ -126,15 +140,19 @@ function crearRutasClientes(prisma, verificarToken) {
       pesoKg: a.pesoKg || null,
       temperaturaC: a.temperaturaC || null,
     };
-    res.status(201).json(await registrarAtencion(prisma, id, datos, req.usuario.email));
+    const atencion = await registrarAtencion(prisma, id, datos, req.usuario.email);
+    await registrar(prisma, req, 'HISTORIA_ESCRITA', { entidad: 'Mascota', entidadId: id });
+    res.status(201).json(atencion);
   }));
 
-  rutas.post('/mascotas/:id/vacunas', manejar(async (req, res, id) => {
+  rutas.post('/mascotas/:id/vacunas', exigirRol(...CLINICA), manejar(async (req, res, id) => {
     const v = req.body || {};
     const error = validarVacuna(v, fechaLocal(new Date()));
     if (error) return res.status(400).json({ error });
     const datos = { nombre: texto(v.nombre), aplicadaEn: fechaUtc(v.aplicadaEn), proximaDosis: v.proximaDosis ? fechaUtc(v.proximaDosis) : null, lote: opcional(v.lote) };
-    res.status(201).json(await registrarVacuna(prisma, id, datos, req.usuario.email));
+    const vacuna = await registrarVacuna(prisma, id, datos, req.usuario.email);
+    await registrar(prisma, req, 'VACUNA_REGISTRADA', { entidad: 'Mascota', entidadId: id });
+    res.status(201).json(vacuna);
   }));
 
   rutas.get('/vacunas/por-vencer', manejar(async (req, res) => {
@@ -142,8 +160,9 @@ function crearRutasClientes(prisma, verificarToken) {
   }));
 
   // Para corregir una vacuna mal registrada.
-  rutas.delete('/vacunas/:id', manejar(async (req, res, id) => {
+  rutas.delete('/vacunas/:id', exigirRol(...CLINICA), manejar(async (req, res, id) => {
     await prisma.vacuna.delete({ where: { id } });
+    await registrar(prisma, req, 'VACUNA_BORRADA', { entidad: 'Vacuna', entidadId: id });
     res.status(204).end();
   }));
 

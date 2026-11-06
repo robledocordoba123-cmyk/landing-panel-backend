@@ -3,6 +3,9 @@
 const { fechaLocal, finDe, horariosPosibles, instante, sumarDias } = require('./horario');
 const { asegurarMascota } = require('../clientes/mascotas');
 
+// Cambia cuando cambie la política de datos: cada autorización guarda su versión.
+const VERSION_POLITICA = '2026-11';
+
 const MAX_CITAS_ACTIVAS = 3; // por correo, para que nadie llene la agenda
 
 // A qué estados puede pasar una cita desde cada estado.
@@ -48,7 +51,7 @@ async function disponibilidad(prisma, servicio, fecha, ahora = new Date()) {
 // La restricción cita_sin_cruces de PostgreSQL rechaza la cita (código 23P01).
 const esCruce = (err) => /23P01|cita_sin_cruces/.test(err.message || '');
 
-async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, mascota, especie, notas, origen = 'WEB' }, ahora = new Date()) {
+async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, mascota, especie, notas, origen = 'WEB', ip = null }, ahora = new Date()) {
   if (!servicio.reservable) throw new ErrorAgenda('Las urgencias se atienden sin cita: ven directamente.', 400);
 
   const permitido = horariosPosibles(fechaLocal(inicio), servicio.duracionMin, ahora).some((h) => h.getTime() === inicio.getTime());
@@ -60,7 +63,8 @@ async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, ma
   try {
     // Todo o nada: si el horario se pierde, no queda un cliente suelto.
     return await prisma.$transaction(async (tx) => {
-      const { id: mascotaId } = await asegurarMascota(tx, { nombre, email, telefono, mascota, especie });
+      const { id: mascotaId, clienteId } = await asegurarMascota(tx, { nombre, email, telefono, mascota, especie });
+      await tx.autorizacionDatos.create({ data: { clienteId, version: VERSION_POLITICA, canal: origen, ip } });
       return tx.cita.create({
         data: { servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin), mascotaId, notas, origen },
         include: { servicio: true },

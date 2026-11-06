@@ -9,7 +9,7 @@ const { ErrorAgenda, crearCita, disponibilidad } = require('../citas/agenda');
 const { fechaLegible, fechaLocal, horaLegible, jornadaDe } = require('../citas/horario');
 const { leerMascota } = require('../clientes/mascotas');
 const { avisar } = require('../avisos/avisos');
-const { enlaceCita } = require('../avisos/enlace');
+const { enlaceCita, enlacePolitica } = require('../avisos/enlace');
 
 const MINUTOS_SIN_RESPUESTA = 30; // después de esto, la conversación vuelve a empezar
 const HORARIOS_A_OFRECER = 8; // para que la lista quepa bien en el chat
@@ -142,7 +142,7 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
     const inicio = new Date(d.inicio);
     return responder([
       `Revisa tu cita:\n👤 ${d.nombre}\n🐾 ${d.mascota}\n🩺 ${d.servicio}\n📅 ${fechaLegible(inicio)}, ${horaLegible(inicio)}\n✉️ ${d.email}`,
-      '¿Está bien? Responde *sí* para reservarla o *no* para empezar de nuevo.',
+      `¿Está bien? Responde *sí* para reservarla y autorizar el tratamiento de tus datos (política: ${enlacePolitica()}), o *no* para empezar de nuevo.`,
     ], 'CITA_CONFIRMAR', d);
   }
   if (estado === 'CITA_CONFIRMAR') {

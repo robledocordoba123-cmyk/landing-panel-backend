@@ -34,7 +34,14 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | POST | `/api/mensajes` | Guarda una pregunta de la página (con validación y límite de envíos) | No |
 | GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista los mensajes y el conteo por estado | Sí |
 | PATCH | `/api/mensajes/:id` | Marca un mensaje como atendido o lo devuelve a nuevo | Sí |
-| POST | `/api/login` | Inicia sesión y devuelve un token (máximo 10 intentos fallidos cada 15 min) | No |
+| POST | `/api/login` | Inicia sesión con cookie (máximo 10 intentos fallidos cada 15 min) | No |
+| POST | `/api/logout` | Cierra la sesión | Sí |
+| GET | `/api/sesion` | Quién inició sesión | Sí |
+| POST | `/api/sesion/clave` | Cambia la contraseña propia | Sí |
+| GET, POST | `/api/usuarios` | Cuentas del equipo | Administración |
+| PATCH | `/api/usuarios/:id` | Cambia rol o desactiva | Administración |
+| GET | `/api/bitacora?pagina=` | Registro de acciones | Administración |
+| POST | `/api/clientes/:id/suprimir` | Suprime los datos personales | Administración |
 
 ## Reglas de la agenda
 
@@ -83,18 +90,24 @@ Bot que atiende a los clientes por WhatsApp (`bot/`):
 
 Para conectarlo a un número real: crear la app en developers.facebook.com con WhatsApp, registrar el webhook `https://tu-api/webhook/whatsapp` y definir `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN` y `WHATSAPP_APP_SECRET`. Sin esas variables el webhook responde 404.
 
-## Seguridad
+## Seguridad y datos personales
 
-- Las contraseñas se guardan cifradas con bcrypt y el panel usa tokens JWT de 8 horas.
-- **Ya no existe una ruta pública para crear administradores.** La cuenta del panel se crea solo desde la consola del servidor:
+- **Sesión en cookie `httpOnly`, `Secure` y `SameSite=Strict`.** JavaScript no puede leerla, así un script inyectado no se la roba. La página llama a la API por su misma dirección (Vercel redirige `/api`), por eso la cookie es del mismo sitio.
+- **Roles:** administración, veterinario y recepción. Recepción maneja agenda y contactos, pero la API no le entrega la historia clínica. Los permisos se revisan en el servidor, no solo se esconden en la pantalla.
+- **Cambios inmediatos.** Cada petición consulta al usuario: desactivar una cuenta o cambiar su rol la saca al instante. Cambiar la clave cierra las demás sesiones.
+- **Bitácora inmutable.** Registra entradas, intentos fallidos, lectura y escritura de historias. Un disparador de PostgreSQL impide modificarla, y nunca guarda contenido clínico.
+- **Ley 1581 de 2012.** Sin autorización no se reserva, y queda la prueba: fecha, versión de la política, canal e IP. El derecho de supresión borra los datos personales y conserva la historia clínica sin identificar a nadie. La política de la demo es un ejemplo: un negocio real debe revisarla con un abogado.
+- **Sin ruta pública para crear cuentas.** La primera se crea desde la consola:
   ```bash
   ADMIN_EMAIL=correo@negocio.co ADMIN_PASSWORD='una-clave-larga' npm run crear-admin
   ```
-- Validación de todos los campos, límite de envíos del formulario, encabezados de seguridad con helmet y CORS solo para el frontend configurado.
+- **Login sin pistas:** el mismo mensaje y un tiempo parecido exista o no el correo, con límite de intentos.
+- Contraseñas con bcrypt, validación de todos los campos, encabezados con helmet y CSP en la web.
+- **Modo demo (`MODO_DEMO=true`):** las cuentas no se pueden cambiar, para que la demo pública siga funcionando.
 
 ## Pruebas
 
-107 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+127 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest
