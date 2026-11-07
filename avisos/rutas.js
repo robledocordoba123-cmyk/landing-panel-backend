@@ -9,6 +9,7 @@ const { avisar, enviarRecordatorios, ultimasNotificaciones } = require('./avisos
 const { leerToken } = require('./enlace');
 const { exigirRol } = require('../seguridad/sesion');
 const { registrarError } = require('../plataforma/registros');
+const { leerPagina } = require('../plataforma/paginacion');
 
 const ANTELACION_MIN = 120; // el cliente puede cambiar su cita hasta 2 horas antes
 const ACTIVAS = ['PENDIENTE', 'CONFIRMADA'];
@@ -102,7 +103,7 @@ function crearRutasAvisos(prisma, verificarToken) {
   }));
 
   rutas.get('/notificaciones', verificarToken, exigirRol('ADMIN', 'RECEPCION'), manejar(async (req, res) => {
-    res.json({ envioReal: Boolean(process.env.BREVO_API_KEY), notificaciones: await ultimasNotificaciones(prisma) });
+    res.json({ envioReal: Boolean(process.env.BREVO_API_KEY), ...(await ultimasNotificaciones(prisma, leerPagina(req.query.pagina))) });
   }));
 
   // Botón del panel para enviar a mano los recordatorios de mañana.

@@ -64,4 +64,17 @@ describe('API de Huellitas', () => {
     expect(mal.status).toBe(401);
     expect(mal.body.error).toBe(noExiste.body.error);
   });
+
+  test('los mensajes se listan por páginas, sin repetir ni perder ninguno', async () => {
+    await prisma.mensaje.createMany({
+      data: Array.from({ length: 25 }, (_, i) => ({ nombre: `Persona ${i}`, email: `p${i}@correo.com`, mensaje: 'Una pregunta', estado: i < 3 ? 'ATENDIDO' : 'NUEVO' })),
+    });
+    const cookie = await token();
+    const pagina = async (consulta) => (await request(app).get('/api/mensajes').query(consulta).set('Cookie', cookie)).body;
+    const uno = await pagina({});
+    const dos = await pagina({ pagina: 2 });
+    expect(uno).toMatchObject({ pagina: 1, paginas: 2, total: 25, resumen: { NUEVO: 22, ATENDIDO: 3 } });
+    expect(new Set([...uno.mensajes, ...dos.mensajes].map((m) => m.id)).size).toBe(25);
+    expect(await pagina({ estado: 'ATENDIDO' })).toMatchObject({ total: 3, paginas: 1, resumen: { NUEVO: 22 } });
+  });
 });

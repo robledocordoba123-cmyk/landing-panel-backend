@@ -185,6 +185,8 @@ describe('Correos', () => {
     const res = await conSesion(request(app).get('/api/notificaciones'));
     expect(res.body.envioReal).toBe(false);
     expect(res.body.notificaciones[0].cita.mascota.nombre).toBe('Toby');
+    expect(res.body).toMatchObject({ pagina: 1, paginas: 1 });
+    expect(res.body.total).toBeGreaterThan(0);
   });
 });
 

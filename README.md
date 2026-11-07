@@ -6,7 +6,7 @@ API REST de Huellitas Veterinaria (negocio **ficticio**, proyecto de portafolio)
 
 ## Tecnologías
 
-Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · express-rate-limit
+Node.js 22 · Express 5 · PostgreSQL · Prisma 6 · JWT · bcrypt · helmet · express-rate-limit
 
 ## Endpoints
 
@@ -29,11 +29,11 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | GET | `/api/mi-cita/:token` | El cliente ve su cita con el enlace | No (enlace firmado) |
 | POST | `/api/mi-cita/:token/cancelar` | El cliente cancela su cita | No (enlace firmado) |
 | POST | `/api/mi-cita/:token/cambiar` | El cliente cambia la fecha | No (enlace firmado) |
-| GET | `/api/notificaciones` | Registro de correos | Sí |
+| GET | `/api/notificaciones?pagina=` | Registro de correos, de a 25 | Sí |
 | POST | `/api/recordatorios` | Envía los recordatorios de mañana | Sí |
 | POST | `/api/tareas/recordatorios` | Lo mismo, para la tarea diaria | Token de tarea |
 | POST | `/api/mensajes` | Guarda una pregunta de la página (con validación y límite de envíos) | No |
-| GET | `/api/mensajes?estado=NUEVO\|ATENDIDO` | Lista los mensajes y el conteo por estado | Sí |
+| GET | `/api/mensajes?estado=NUEVO\|ATENDIDO&pagina=` | Lista los mensajes de a 20 y el conteo por estado | Sí |
 | PATCH | `/api/mensajes/:id` | Marca un mensaje como atendido o lo devuelve a nuevo | Sí |
 | POST | `/api/login` | Inicia sesión con cookie (máximo 10 intentos fallidos cada 15 min) | No |
 | POST | `/api/logout` | Cierra la sesión | Sí |
@@ -126,9 +126,16 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
 
 Ruta de salud, registros en JSON con id de petición, apagado ordenado y copias de seguridad cifradas cada semana, con la restauración probada en CI. Todo está en [docs/operacion.md](docs/operacion.md).
 
+## Calidad
+
+- **ESLint** (`npm run lint`) y pruebas en cada push y PR (GitHub Actions).
+- **Dependabot** revisa dependencias cada semana; las menores llegan juntas en un PR.
+- **Prisma 6**: Prisma 7 cambia el cliente (adaptadores de base de datos y módulos ES), así que se migrará a propósito en un cambio aparte, no con una actualización automática.
+- **Cada módulo en su carpeta** (`citas/`, `clientes/`, `avisos/`, `mensajes/`, `ajustes/`, `reportes/`, `seguridad/`, `bot/`, `plataforma/`); `app.js` solo los une.
+
 ## Pruebas
 
-161 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+162 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest
