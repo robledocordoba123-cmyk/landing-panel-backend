@@ -133,7 +133,7 @@ describe('Roles', () => {
   });
 
   test('solo administración ve el equipo y la bitácora', async () => {
-    for (const ruta of ['/api/usuarios', '/api/bitacora']) {
+    for (const ruta of ['/api/usuarios', '/api/bitacora', '/api/diagnostico/red']) {
       expect((await como(recepcion, request(app).get(ruta))).status).toBe(403);
       expect((await como(veterinario, request(app).get(ruta))).status).toBe(403);
       expect((await como(admin, request(app).get(ruta))).status).toBe(200);
