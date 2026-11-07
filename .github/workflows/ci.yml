@@ -26,7 +26,7 @@ jobs:
     env:
       DATABASE_URL_TEST: postgresql://huellitas:huellitas_dev@localhost:5432/huellitas_test?schema=public
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22

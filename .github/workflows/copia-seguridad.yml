@@ -27,7 +27,7 @@ jobs:
           else
             echo "listos=si" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.secretos.outputs.listos == 'si'
       - name: Instalar el cliente de PostgreSQL
         if: steps.secretos.outputs.listos == 'si'
