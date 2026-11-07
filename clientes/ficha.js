@@ -2,17 +2,27 @@
 // de salud y de contacto: solo se llega desde rutas protegidas del panel.
 const { ErrorAgenda } = require('../citas/agenda');
 const { fechaLocal, sumarDias } = require('../citas/horario');
+const { totalPaginas } = require('../plataforma/paginacion');
+
+const POR_PAGINA = 20;
 
 // Búsqueda por nombre, correo, teléfono o nombre de la mascota.
-function buscarClientes(prisma, q) {
+async function buscarClientes(prisma, q, pagina = 1) {
   const texto = (q || '').trim();
   const contiene = { contains: texto, mode: 'insensitive' };
-  return prisma.cliente.findMany({
-    where: texto ? { OR: [{ nombre: contiene }, { email: contiene }, { telefono: contiene }, { mascotas: { some: { nombre: contiene } } }] } : {},
-    orderBy: { nombre: 'asc' },
-    take: 50,
-    include: { mascotas: { select: { id: true, nombre: true, especie: true }, orderBy: { nombre: 'asc' } } },
-  });
+  const where = texto ? { OR: [{ nombre: contiene }, { email: contiene }, { telefono: contiene }, { mascotas: { some: { nombre: contiene } } }] } : {};
+  const [clientes, total] = await Promise.all([
+    prisma.cliente.findMany({
+      where,
+      // El id desempata: sin él, dos nombres iguales podrían repetirse entre páginas.
+      orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      skip: (pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
+      include: { mascotas: { select: { id: true, nombre: true, especie: true }, orderBy: { nombre: 'asc' } } },
+    }),
+    prisma.cliente.count({ where }),
+  ]);
+  return { clientes, pagina, paginas: totalPaginas(total, POR_PAGINA), total };
 }
 
 async function detalleCliente(prisma, id) {

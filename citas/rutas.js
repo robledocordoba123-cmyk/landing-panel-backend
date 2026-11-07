@@ -7,6 +7,7 @@ const { ESPECIES } = require('../clientes/mascotas');
 const { avisar } = require('../avisos/avisos');
 const { crearToken } = require('../avisos/enlace');
 const { registrar } = require('../seguridad/bitacora');
+const { registrarError } = require('../plataforma/registros');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DIAS_MAX_CONSULTA = 31;
@@ -32,7 +33,7 @@ const citaPublica = (c) => ({ id: c.id, servicio: c.servicio.nombre, inicio: c.i
 
 function responderError(res, err, mensaje) {
   if (err instanceof ErrorAgenda) return res.status(err.estado).json({ error: err.message });
-  console.error(err);
+  registrarError(res.req, err);
   return res.status(500).json({ error: mensaje });
 }
 

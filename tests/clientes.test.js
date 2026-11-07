@@ -119,7 +119,7 @@ describe('Clientes y mascotas en el panel', () => {
   test('busca por nombre, teléfono, correo o mascota', async () => {
     await clienteConMascota();
     await prisma.cliente.create({ data: { nombre: 'Pedro', email: 'pedro@correo.com' } });
-    const buscar = async (q) => (await conToken(request(app).get('/api/clientes')).query({ q })).body.map((c) => c.nombre);
+    const buscar = async (q) => (await conToken(request(app).get('/api/clientes')).query({ q })).body.clientes.map((c) => c.nombre);
     expect(await buscar('')).toEqual(['Ana', 'Pedro']);
     expect(await buscar('misha')).toEqual(['Ana']);
     expect(await buscar('111 2222')).toEqual(['Ana']);

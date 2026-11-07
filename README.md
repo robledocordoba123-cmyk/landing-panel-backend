@@ -17,7 +17,8 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | POST | `/api/citas` | Reserva una cita (con validación y límite de envíos) | No |
 | GET | `/api/citas?desde=&hasta=` | Citas de un rango de fechas | Sí |
 | PATCH | `/api/citas/:id/estado` | Cambia el estado de una cita | Sí |
-| GET | `/api/clientes?q=` | Busca clientes por nombre, teléfono, correo o mascota | Sí |
+| GET | `/api/salud` | Dice si la API llega a la base de datos (200 o 503) | No |
+| GET | `/api/clientes?q=&pagina=` | Busca clientes por nombre, teléfono, correo o mascota, de a 20 | Sí |
 | GET, PATCH | `/api/clientes/:id` | Ver o corregir un cliente | Sí |
 | POST | `/api/clientes/:id/mascotas` | Agrega una mascota | Sí |
 | GET, PATCH | `/api/mascotas/:id` | Ficha completa (cliente, historia, vacunas y citas) o corregir datos | Sí |
@@ -107,9 +108,13 @@ Para conectarlo a un número real: crear la app en developers.facebook.com con W
 - Contraseñas con bcrypt, validación de todos los campos, encabezados con helmet y CSP en la web.
 - **Modo demo (`MODO_DEMO=true`):** las cuentas no se pueden cambiar, para que la demo pública siga funcionando.
 
+## Operación
+
+Ruta de salud, registros en JSON con id de petición, apagado ordenado y copias de seguridad cifradas cada semana, con la restauración probada en CI. Todo está en [docs/operacion.md](docs/operacion.md).
+
 ## Pruebas
 
-127 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+146 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest

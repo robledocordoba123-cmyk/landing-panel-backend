@@ -34,3 +34,9 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm test
+      # Corre en un contenedor para que pg_dump sea de la misma versión que el servidor:
+      # el del runner es más nuevo y su copia no se restaura en PostgreSQL 16.
+      - name: Probar la copia de seguridad y su restauración
+        run: >-
+          docker run --rm --network host -v "$PWD:/app" -w /app -e BD_URL="$DATABASE_URL_TEST"
+          postgres:16-alpine sh -c 'apk add -q bash gnupg && scripts/probar-copia.sh'
