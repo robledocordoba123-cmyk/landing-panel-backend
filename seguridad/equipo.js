@@ -79,6 +79,24 @@ function crearRutasEquipo(prisma, verificarSesion) {
     res.json(await leerBitacora(prisma, leerPagina(req.query.pagina)));
   });
 
+  // Diagnóstico de proxies: muestra cómo llega la petición de quien la hace, para
+  // ajustar TRUST_PROXY. Solo devuelve datos de esa misma petición.
+  rutas.get('/diagnostico/red', soloAdmin, (req, res) => {
+    const cabecera = (nombre) => req.get(nombre) || null;
+    res.json({
+      ipDetectada: req.ip,
+      cadena: req.ips,
+      saltosDeConfianza: Number(process.env.TRUST_PROXY) || null,
+      cabeceras: {
+        'x-forwarded-for': cabecera('x-forwarded-for'),
+        'x-real-ip': cabecera('x-real-ip'),
+        'x-vercel-forwarded-for': cabecera('x-vercel-forwarded-for'),
+        'cf-connecting-ip': cabecera('cf-connecting-ip'),
+        'true-client-ip': cabecera('true-client-ip'),
+      },
+    });
+  });
+
   return rutas;
 }
 
