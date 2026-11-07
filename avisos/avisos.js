@@ -5,6 +5,7 @@ const { enlaceCita } = require('./enlace');
 const { plantilla } = require('./plantillas');
 const { fechaLocal, instante, sumarDias } = require('../citas/horario');
 const { describirError, registro } = require('../plataforma/registros');
+const { totalPaginas } = require('../plataforma/paginacion');
 
 const DATOS_CITA = { servicio: true, mascota: { include: { cliente: true } } };
 
@@ -50,12 +51,19 @@ async function enviarRecordatorios(prisma, ahora = new Date()) {
   return resumen;
 }
 
-function ultimasNotificaciones(prisma) {
-  return prisma.notificacion.findMany({
-    orderBy: { creadoEn: 'desc' },
-    take: 50,
-    include: { cita: { select: { inicio: true, mascota: { select: { nombre: true } } } } },
-  });
+const POR_PAGINA = 25;
+
+async function ultimasNotificaciones(prisma, pagina = 1) {
+  const [notificaciones, total] = await Promise.all([
+    prisma.notificacion.findMany({
+      orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }],
+      skip: (pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
+      include: { cita: { select: { inicio: true, mascota: { select: { nombre: true } } } } },
+    }),
+    prisma.notificacion.count(),
+  ]);
+  return { notificaciones, pagina, paginas: totalPaginas(total, POR_PAGINA), total };
 }
 
 module.exports = { avisar, enviarRecordatorios, ultimasNotificaciones };

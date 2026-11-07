@@ -1,0 +1,24 @@
+# Revisa dependencias cada semana. Las actualizaciones menores llegan juntas en un
+# solo PR; las mayores, una por una, porque pueden traer cambios que rompen.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: America/Bogota
+    open-pull-requests-limit: 5
+    groups:
+      menores:
+        update-types: [minor, patch]
+    ignore:
+      # Prisma 7 cambia el cliente (adaptadores y módulos ES): se migra a propósito, no solo.
+      - dependency-name: prisma
+        update-types: [version-update:semver-major]
+      - dependency-name: '@prisma/client'
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

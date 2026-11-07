@@ -32,6 +32,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npx prisma generate
       - run: npm test
       # Corre en un contenedor para que pg_dump sea de la misma versión que el servidor:
