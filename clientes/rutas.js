@@ -7,6 +7,8 @@ const { ESPECIES } = require('./mascotas');
 const { buscarClientes, detalleCliente, fichaMascota, registrarAtencion, registrarVacuna, suprimirCliente, vacunasPorVencer } = require('./ficha');
 const { exigirRol, soloFueraDeDemo } = require('../seguridad/sesion');
 const { registrar } = require('../seguridad/bitacora');
+const { leerPagina } = require('../plataforma/paginacion');
+const { registrarError } = require('../plataforma/registros');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEXOS = ['Macho', 'Hembra'];
@@ -75,7 +77,7 @@ function manejar(accion) {
       if (err instanceof ErrorAgenda) return res.status(err.estado).json({ error: err.message });
       if (err.code === 'P2002') return res.status(409).json({ error: 'Ya existe un cliente con ese correo.' });
       if (err.code === 'P2025') return res.status(404).json({ error: 'No existe' });
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo completar la operación' });
     }
   };
@@ -86,7 +88,8 @@ function crearRutasClientes(prisma, verificarToken) {
   rutas.use(['/clientes', '/mascotas', '/vacunas'], verificarToken);
 
   rutas.get('/clientes', manejar(async (req, res) => {
-    res.json(await buscarClientes(prisma, typeof req.query.q === 'string' ? req.query.q.slice(0, 80) : ''));
+    const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 80) : '';
+    res.json(await buscarClientes(prisma, q, leerPagina(req.query.pagina)));
   }));
 
   rutas.get('/clientes/:id', manejar(async (req, res, id) => {

@@ -34,3 +34,7 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm test
+      - name: Probar la copia de seguridad y su restauración
+        env:
+          BD_URL: ${{ env.DATABASE_URL_TEST }}
+        run: scripts/probar-copia.sh

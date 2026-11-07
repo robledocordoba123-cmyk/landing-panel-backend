@@ -7,6 +7,7 @@ const { finDe, horariosPosibles, fechaLocal } = require('../citas/horario');
 const { avisar, enviarRecordatorios, ultimasNotificaciones } = require('./avisos');
 const { leerToken } = require('./enlace');
 const { exigirRol } = require('../seguridad/sesion');
+const { registrarError } = require('../plataforma/registros');
 
 const ANTELACION_MIN = 120; // el cliente puede cambiar su cita hasta 2 horas antes
 const ACTIVAS = ['PENDIENTE', 'CONFIRMADA'];
@@ -45,7 +46,7 @@ function manejar(accion) {
       await accion(req, res);
     } catch (err) {
       if (err instanceof ErrorAgenda) return res.status(err.estado).json({ error: err.message });
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo completar la operación' });
     }
   };

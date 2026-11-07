@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const { procesarMensaje } = require('./motor');
+const { describirError, registro } = require('../plataforma/registros');
 
 const VERSION_API = 'v21.0';
 
@@ -31,7 +32,7 @@ async function enviarTexto(para, texto) {
     body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'text', text: { body: texto } }),
   });
   if (!respuesta.ok) {
-    console.error('WhatsApp no aceptó el mensaje:', respuesta.status, await respuesta.text().catch(() => ''));
+    registro.error('WhatsApp no aceptó el mensaje', { estado: respuesta.status });
   }
 }
 
@@ -62,7 +63,7 @@ function crearRutasWhatsApp(prisma) {
           : { respuestas: ['Por ahora solo entiendo mensajes de texto. Escribe *menú* para ver las opciones.'] };
         for (const r of respuestas) await enviarTexto(m.from, r);
       } catch (err) {
-        console.error('Error atendiendo un mensaje de WhatsApp:', err.message);
+        registro.error('Error atendiendo un mensaje de WhatsApp', describirError(err));
       }
     }
   });

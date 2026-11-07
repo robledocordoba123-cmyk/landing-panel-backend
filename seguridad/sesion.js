@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { registrar } = require('./bitacora');
+const { registrarError } = require('../plataforma/registros');
 
 const COOKIE = 'huellitas_sesion';
 const DURACION_MS = 8 * 60 * 60 * 1000;
@@ -56,7 +57,7 @@ function crearVerificarSesion(prisma) {
       req.usuario = publico(usuario);
       next();
     } catch (err) {
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo verificar la sesión' });
     }
   };
@@ -95,7 +96,7 @@ function crearRutasSesion(prisma, verificarSesion) {
       await registrar(prisma, { ...req, ip: req.ip, usuario: publico(usuario) }, 'LOGIN');
       res.json(publico(usuario));
     } catch (err) {
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'Error al iniciar sesión' });
     }
   });
@@ -125,7 +126,7 @@ function crearRutasSesion(prisma, verificarSesion) {
       await registrar(prisma, req, 'CLAVE_CAMBIADA');
       res.status(204).end();
     } catch (err) {
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo cambiar la contraseña' });
     }
   });

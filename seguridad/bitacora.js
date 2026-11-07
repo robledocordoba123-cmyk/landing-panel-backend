@@ -1,5 +1,8 @@
 // Bitácora: quién hizo qué, cuándo y desde dónde. Nunca guarda el contenido de
 // una historia clínica ni contraseñas, solo que la acción ocurrió.
+const { totalPaginas } = require('../plataforma/paginacion');
+const { describirError, registro } = require('../plataforma/registros');
+
 function registrar(prisma, req, accion, { entidad, entidadId, detalle, email } = {}) {
   return prisma.bitacora.create({
     data: {
@@ -13,7 +16,7 @@ function registrar(prisma, req, accion, { entidad, entidadId, detalle, email } =
     },
   }).catch((err) => {
     // Un fallo aquí se avisa en los registros, pero no tumba la operación.
-    console.error('No se pudo escribir en la bitácora', accion, err.message);
+    registro.error('No se pudo escribir en la bitácora', { accion, ...describirError(err) });
   });
 }
 
@@ -24,7 +27,7 @@ async function leerBitacora(prisma, pagina) {
     prisma.bitacora.findMany({ orderBy: { id: 'desc' }, skip: (pagina - 1) * POR_PAGINA, take: POR_PAGINA }),
     prisma.bitacora.count(),
   ]);
-  return { registros, pagina, paginas: Math.max(1, Math.ceil(total / POR_PAGINA)), total };
+  return { registros, pagina, paginas: totalPaginas(total, POR_PAGINA), total };
 }
 
 module.exports = { registrar, leerBitacora };

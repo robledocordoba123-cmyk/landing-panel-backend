@@ -13,6 +13,9 @@ const { crearRutasClientes } = require('./clientes/rutas');
 const { crearRutasAvisos } = require('./avisos/rutas');
 const { crearRutasSesion, crearVerificarSesion } = require('./seguridad/sesion');
 const { crearRutasEquipo } = require('./seguridad/equipo');
+const { manejarErrores, rutaNoEncontrada } = require('./plataforma/errores');
+const { registrarError, registrarPeticiones } = require('./plataforma/registros');
+const { crearRutaSalud } = require('./plataforma/salud');
 
 const prisma = new PrismaClient();
 const app = express();
@@ -21,6 +24,8 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+app.use(registrarPeticiones);
+
 // Solo el frontend configurado puede llamar a la API desde el navegador.
 const origenes = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(helmet());
@@ -28,9 +33,8 @@ app.use(cors(origenes.length ? { origin: origenes } : {}));
 // Se guarda el cuerpo tal como llegó: WhatsApp firma los bytes exactos.
 app.use(express.json({ limit: '100kb', verify: (req, res, buf) => { req.cuerpoCrudo = buf; } }));
 app.use(cookieParser());
-// En Render la API va detrás de varios proxies (Cloudflare, balanceador y proxy
-// interno: TRUST_PROXY=3). Sin el número correcto, el límite de intentos no ve
-// la IP real del visitante.
+// La API va detrás de varios proxies: los 3 de Render más Vercel (TRUST_PROXY=4).
+// Sin el número correcto, el límite de intentos no ve la IP real del visitante.
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
 
 const SERVICIOS = ['Consulta general', 'Vacunación', 'Peluquería', 'Urgencias', 'Otro'];
@@ -58,6 +62,7 @@ function validarSolicitud({ nombre, email, telefono, mascota, servicio, mensaje,
 app.get('/', (req, res) => {
   res.json({ estado: 'ok', servicio: 'API de Huellitas Veterinaria' });
 });
+app.get('/api/salud', crearRutaSalud(prisma));
 
 // Guarda una solicitud de cita que llega desde la página (público).
 app.post('/api/mensajes', limiteFormulario, async (req, res) => {
@@ -80,7 +85,7 @@ app.post('/api/mensajes', limiteFormulario, async (req, res) => {
     });
     res.status(201).json(nueva);
   } catch (err) {
-    console.error(err);
+    registrarError(req, err);
     res.status(500).json({ error: 'No se pudo guardar la solicitud' });
   }
 });
@@ -99,7 +104,7 @@ app.get('/api/mensajes', verificarSesion, async (req, res) => {
     const resumen = Object.fromEntries(ESTADOS.map((e) => [e, porEstado.find((p) => p.estado === e)?._count._all || 0]));
     res.json({ mensajes, resumen });
   } catch (err) {
-    console.error(err);
+    registrarError(req, err);
     res.status(500).json({ error: 'No se pudieron obtener las solicitudes' });
   }
 });
@@ -119,7 +124,7 @@ app.patch('/api/mensajes/:id', verificarSesion, async (req, res) => {
     res.json(actualizado);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'La solicitud no existe' });
-    console.error(err);
+    registrarError(req, err);
     res.status(500).json({ error: 'No se pudo actualizar la solicitud' });
   }
 });
@@ -145,7 +150,7 @@ app.post('/api/bot/simulador', limiteSimulador, async (req, res) => {
     const { respuestas } = await procesarMensaje(prisma, { id: `sim:${sesion}`, texto });
     res.json({ respuestas });
   } catch (err) {
-    console.error(err);
+    registrarError(req, err);
     res.status(500).json({ error: 'El asistente no pudo responder' });
   }
 });
@@ -154,5 +159,8 @@ app.post('/api/bot/simulador', limiteSimulador, async (req, res) => {
 // no existe una ruta pública para crear cuentas.
 app.use('/api', crearRutasSesion(prisma, verificarSesion));
 app.use('/api', crearRutasEquipo(prisma, verificarSesion));
+
+app.use(rutaNoEncontrada);
+app.use(manejarErrores);
 
 module.exports = { app, prisma };

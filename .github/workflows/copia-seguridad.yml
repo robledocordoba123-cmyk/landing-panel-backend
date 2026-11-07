@@ -1,0 +1,48 @@
+# Cada domingo a las 3:00 a. m. de Colombia saca una copia cifrada de la base de datos
+# y la guarda 30 días como artefacto. Es opcional: sin los secretos BD_COPIA_URL y
+# CLAVE_COPIA no hace nada. Si falla, GitHub avisa por correo.
+name: Copia de seguridad
+
+on:
+  schedule:
+    - cron: '0 8 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  copia:
+    runs-on: ubuntu-latest
+    env:
+      BD_URL: ${{ secrets.BD_COPIA_URL }}
+      CLAVE_COPIA: ${{ secrets.CLAVE_COPIA }}
+    steps:
+      - name: Revisar los secretos
+        id: secretos
+        run: |
+          if [ -z "$BD_URL" ] || [ -z "$CLAVE_COPIA" ]; then
+            echo "Sin BD_COPIA_URL o CLAVE_COPIA: no se saca copia."
+            echo "listos=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "listos=si" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secretos.outputs.listos == 'si'
+      - name: Instalar el cliente de PostgreSQL
+        if: steps.secretos.outputs.listos == 'si'
+        # pg_dump debe ser igual o más nuevo que el servidor.
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+      - name: Sacar la copia cifrada
+        if: steps.secretos.outputs.listos == 'si'
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" scripts/copia-seguridad.sh "huellitas-$(date -u +%Y%m%d).dump.gpg"
+      - uses: actions/upload-artifact@v4
+        if: steps.secretos.outputs.listos == 'si'
+        with:
+          name: copia-huellitas
+          path: huellitas-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error

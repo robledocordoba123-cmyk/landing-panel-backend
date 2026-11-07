@@ -3,6 +3,8 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { leerBitacora, registrar } = require('./bitacora');
 const { MIN_CLAVE, ROLES, exigirRol, soloFueraDeDemo } = require('./sesion');
+const { leerPagina } = require('../plataforma/paginacion');
+const { registrarError } = require('../plataforma/registros');
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const texto = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -37,7 +39,7 @@ function crearRutasEquipo(prisma, verificarSesion) {
       res.status(201).json(usuario);
     } catch (err) {
       if (err.code === 'P2002') return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo crear la cuenta' });
     }
   });
@@ -68,14 +70,13 @@ function crearRutasEquipo(prisma, verificarSesion) {
       res.json(usuario);
     } catch (err) {
       if (err.message === 'SIN_ADMIN') return res.status(409).json({ error: 'Debe quedar al menos una cuenta de administración activa.' });
-      console.error(err);
+      registrarError(req, err);
       res.status(500).json({ error: 'No se pudo actualizar la cuenta' });
     }
   });
 
   rutas.get('/bitacora', soloAdmin, async (req, res) => {
-    const pagina = Math.max(1, Number.parseInt(req.query.pagina, 10) || 1);
-    res.json(await leerBitacora(prisma, pagina));
+    res.json(await leerBitacora(prisma, leerPagina(req.query.pagina)));
   });
 
   return rutas;

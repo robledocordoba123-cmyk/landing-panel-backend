@@ -4,6 +4,7 @@ const { enviarCorreo } = require('./correo');
 const { enlaceCita } = require('./enlace');
 const { plantilla } = require('./plantillas');
 const { fechaLocal, instante, sumarDias } = require('../citas/horario');
+const { describirError, registro } = require('../plataforma/registros');
 
 const DATOS_CITA = { servicio: true, mascota: { include: { cliente: true } } };
 
@@ -16,7 +17,7 @@ async function avisar(prisma, tipo, citaId) {
     await prisma.notificacion.create({ data: { citaId, tipo, destinatario: para, asunto, ...resultado } });
     return resultado.estado;
   } catch (err) {
-    console.error('No se pudo registrar el aviso', tipo, citaId, err.message);
+    registro.error('No se pudo registrar el aviso', { aviso: tipo, cita: citaId, ...describirError(err) });
     return 'FALLIDA';
   }
 }
