@@ -4,7 +4,7 @@
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
-const { fechaLocal, finDe, instante, sumarDias } = require('../citas/horario');
+const { CALENDARIO_POR_DEFECTO, fechaLocal, finDe, instante, jornadaDe, sumarDias } = require('../citas/horario');
 const { asegurarMascota } = require('../clientes/mascotas');
 
 if (process.env.DEMO !== 'true') {
@@ -44,14 +44,80 @@ const citasDeEjemplo = [
 
 const diaUtc = (fecha) => new Date(`${fecha}T00:00:00Z`);
 
+// La demo es pública y administración puede cambiar el horario y los servicios: cada
+// arranque los devuelve a como nacen, para que nadie la deje cerrada.
+const SERVICIOS_BASE = [
+  { nombre: 'Consulta general', detalle: 'revisión completa y tratamiento', precioDesde: 60000, duracionMin: 30, recurso: 'CONSULTORIO', reservable: true },
+  { nombre: 'Vacunación', detalle: 'plan de vacunas y desparasitación', precioDesde: 45000, duracionMin: 30, recurso: 'CONSULTORIO', reservable: true },
+  { nombre: 'Peluquería', detalle: 'baño, corte, oídos y uñas', precioDesde: 50000, duracionMin: 90, recurso: 'PELUQUERIA', reservable: true },
+  { nombre: 'Urgencias', detalle: 'atención prioritaria todos los días', precioDesde: 90000, duracionMin: 30, recurso: 'CONSULTORIO', reservable: false },
+];
+
+async function restablecerNegocio() {
+  await prisma.cierre.deleteMany();
+  for (const [dia, jornada] of CALENDARIO_POR_DEFECTO.jornadas) {
+    await prisma.jornada.upsert({ where: { dia }, update: jornada, create: { dia, ...jornada } });
+  }
+  for (const servicio of SERVICIOS_BASE) {
+    await prisma.servicio.upsert({ where: { nombre: servicio.nombre }, update: { ...servicio, activo: true }, create: servicio });
+  }
+  await prisma.servicio.deleteMany({ where: { nombre: { notIn: SERVICIOS_BASE.map((s) => s.nombre) } } });
+}
+
+// Generador con semilla fija: el historial sale igual en cada arranque.
+function azar(semilla) {
+  let s = semilla;
+  return () => {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    return s / 2147483648;
+  };
+}
+
+// Ocho semanas de citas pasadas, para que los reportes muestren algo con sentido.
+async function crearHistorial(servicios) {
+  const hoy = fechaLocal(new Date());
+  const mascotas = await prisma.mascota.findMany({ select: { id: true, clienteId: true } });
+  const reservables = servicios.filter((s) => s.reservable);
+  const numero = azar(2026);
+  const citas = [];
+  for (let dia = -56; dia <= -2; dia += 1) {
+    const fecha = sumarDias(hoy, dia);
+    const jornada = jornadaDe(fecha);
+    const cuantas = Math.floor(numero() * (jornada.cierra - jornada.abre > 360 ? 6 : 3));
+    const libre = { CONSULTORIO: jornada.abre, PELUQUERIA: jornada.abre };
+    for (let i = 0; i < cuantas; i += 1) {
+      const servicio = reservables[Math.floor(numero() * reservables.length)];
+      const minuto = libre[servicio.recurso];
+      if (minuto + servicio.duracionMin > jornada.cierra) continue;
+      libre[servicio.recurso] = minuto + servicio.duracionMin + 30 * Math.floor(numero() * 3);
+      const suerte = numero();
+      const inicio = instante(fecha, minuto);
+      citas.push({
+        servicioId: servicio.id, recurso: servicio.recurso, inicio, fin: finDe(inicio, servicio.duracionMin),
+        mascotaId: mascotas[Math.floor(numero() * mascotas.length)].id,
+        estado: suerte < 0.78 ? 'ATENDIDA' : suerte < 0.88 ? 'NO_ASISTIO' : 'CANCELADA',
+        origen: numero() < 0.3 ? 'WHATSAPP' : 'WEB',
+      });
+    }
+  }
+  await prisma.cita.createMany({ data: citas });
+  // Cada cliente "llegó" el día de su primera cita.
+  for (const { clienteId } of mascotas) {
+    const primera = await prisma.cita.findFirst({ where: { mascota: { clienteId } }, orderBy: { inicio: 'asc' } });
+    if (primera) await prisma.cliente.update({ where: { id: clienteId }, data: { creadoEn: primera.inicio } });
+  }
+  return citas.length;
+}
+
 async function crearCitasDeEjemplo() {
-  const servicios = await prisma.servicio.findMany();
   const hoy = fechaLocal(new Date());
   await prisma.atencion.deleteMany();
   await prisma.vacuna.deleteMany();
   await prisma.cita.deleteMany();
   await prisma.mascota.deleteMany();
   await prisma.cliente.deleteMany();
+  await restablecerNegocio();
+  const servicios = await prisma.servicio.findMany();
 
   for (const { dia, hora, servicio: nombreServicio, nombre, email, telefono, mascota, especie, ...cita } of citasDeEjemplo) {
     const servicio = servicios.find((s) => s.nombre === nombreServicio);
@@ -76,6 +142,7 @@ async function crearCitasDeEjemplo() {
   await prisma.atencion.create({
     data: { mascotaId: luna.id, citaId: citaLuna.id, fecha: citaLuna.inicio, motivo: 'Control después de cirugía', diagnostico: 'Cicatrización normal, sin signos de infección.', tratamiento: 'Retirar puntos en 7 días. Mantener el collar isabelino.', pesoKg: 18.4, temperaturaC: 38.5, registradoPor },
   });
+  return crearHistorial(servicios);
 }
 
 (async () => {
@@ -87,7 +154,7 @@ async function crearCitasDeEjemplo() {
   await prisma.conversacionBot.deleteMany();
   await prisma.mensaje.deleteMany();
   await prisma.mensaje.createMany({ data: ejemplos });
-  await crearCitasDeEjemplo();
-  console.log(`Demo lista: ${ejemplos.length} solicitudes, ${citasDeEjemplo.length} citas y la cuenta admin@huellitas.demo`);
+  const historial = await crearCitasDeEjemplo();
+  console.log(`Demo lista: ${ejemplos.length} solicitudes, ${citasDeEjemplo.length} citas, ${historial} de historial y la cuenta admin@huellitas.demo`);
   await prisma.$disconnect();
 })();

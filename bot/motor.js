@@ -6,7 +6,8 @@ const negocio = require('./negocio');
 const { responderConIA } = require('./ia');
 const { interpretarFecha } = require('./fechas');
 const { ErrorAgenda, crearCita, disponibilidad } = require('../citas/agenda');
-const { fechaLegible, fechaLocal, horaLegible, jornadaDe } = require('../citas/horario');
+const { fechaLegible, fechaLocal, horaLegible, jornadaDe, lineasHorario, textoHora } = require('../citas/horario');
+const { leerCalendario } = require('../citas/calendario');
 const { leerMascota } = require('../clientes/mascotas');
 const { avisar } = require('../avisos/avisos');
 const { enlaceCita, enlacePolitica } = require('../avisos/enlace');
@@ -27,10 +28,11 @@ const OPCIONES_MENU = ['1', '2', '3', '4'];
 
 const textoServicios = (servicios) =>
   `Estos son nuestros servicios:\n${servicios.map((s) => `• *${s.nombre}*: ${s.detalle}, desde ${pesos(s.precioDesde)}`).join('\n')}\n\nSi quieres agendar una cita, escribe *3*.`;
-const textoHorarios = () => `🕒 ${negocio.horarios.join('\n🕒 ')}\n📍 ${negocio.ubicacion}\n💳 Recibimos ${negocio.pagos}.`;
+const horariosDelNegocio = async (prisma) => [...lineasHorario(await leerCalendario(prisma)), negocio.urgencias];
+const textoHorarios = (horarios) => `🕒 ${horarios.join('\n🕒 ')}\n📍 ${negocio.ubicacion}\n💳 Recibimos ${negocio.pagos}.`;
 const listaServicios = (servicios) => servicios.map((s, i) => `${i + 1}. ${s.nombre}`).join('\n');
 const PREGUNTA_FECHA = '¿Para qué día? Escribe *hoy*, *mañana*, un día (ej.: *sábado*) o una fecha (ej.: *15/11*).';
-const todosLosServicios = (prisma) => prisma.servicio.findMany({ orderBy: { id: 'asc' } });
+const todosLosServicios = (prisma) => prisma.servicio.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
 const reservables = async (prisma) => (await todosLosServicios(prisma)).filter((s) => s.reservable);
 
 const URGENCIA = /(urgencia|emergencia|sangr|envenen|no respira|convuls|atropell|desmay)/;
@@ -129,7 +131,12 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
     const libres = (await disponibilidad(prisma, servicio, fecha)).slice(0, HORARIOS_A_OFRECER);
     if (!libres.length) return responder([`Ese día no tengo horarios libres para ${servicio.nombre}. Prueba con otro día, por favor.`], 'CITA_FECHA', datos);
     const lista = libres.map((h, i) => `${i + 1}. ${horaLegible(h)}`).join('\n');
-    const reducida = jornadaDe(fecha).abre !== 8 * 60 ? ' (ese día atendemos de 9:00 a. m. a 2:00 p. m.)' : '';
+    // Se aclara el horario cuando ese día no es el de un lunes cualquiera.
+    const calendario = await leerCalendario(prisma);
+    const jornada = jornadaDe(fecha, calendario);
+    const lunes = calendario.jornadas.get(1);
+    const distinta = !lunes || jornada.abre !== lunes.abre || jornada.cierra !== lunes.cierra;
+    const reducida = distinta ? ` (ese día atendemos de ${textoHora(jornada.abre)} a ${textoHora(jornada.cierra)})` : '';
     return responder(
       [`Estos son los horarios libres del *${fechaLegible(libres[0])}*${reducida}:\n${lista}\n\nEscribe el número, u otra fecha si prefieres.`],
       'CITA_HORA',
@@ -175,14 +182,14 @@ async function procesarMensaje(prisma, { id, telefono = null, texto }) {
 
   // Menú principal y preguntas sueltas.
   if (t === '1' || /(servicio|precio|cuanto|vale|cuesta|vacuna|pelu|bano|consulta)/.test(t)) return responder([textoServicios(await todosLosServicios(prisma))]);
-  if (t === '2' || /(horario|hora|abren|cierran|ubicacion|direccion|donde|queda|domingo|festivo|pago|nequi)/.test(t)) return responder([textoHorarios()]);
+  if (t === '2' || /(horario|hora|abren|cierran|ubicacion|direccion|donde|queda|domingo|festivo|pago|nequi)/.test(t)) return responder([textoHorarios(await horariosDelNegocio(prisma))]);
   if (t === '3' || /(cita|agendar|agenda|turno|reservar)/.test(t)) return responder(['¡Claro! Te ayudo a reservar la cita. ¿Cuál es tu nombre?'], 'CITA_NOMBRE', {});
   if (t === '4' || /(persona|humano|asesor|agente)/.test(t)) {
     await crearSolicitud(prisma, { telefono, mensaje: `Pidió hablar con una persona por WhatsApp. Último mensaje: "${original}"` });
     return responder(['Te paso con una persona del equipo. 🙋 Te escribirán por aquí en horario de atención.'], 'HUMANO', {});
   }
 
-  const deIA = await responderConIA(original, await todosLosServicios(prisma));
+  const deIA = await responderConIA(original, await todosLosServicios(prisma), await horariosDelNegocio(prisma));
   if (deIA) return responder([deIA, 'Si quieres ver las opciones, escribe *menú*.']);
   return responder(['No te entendí del todo. 😅', ...MENU]);
 }
