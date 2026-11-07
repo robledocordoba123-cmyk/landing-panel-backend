@@ -25,7 +25,7 @@ Cada domingo, GitHub Actions saca una copia, la cifra con AES-256 y la guarda 30
 ### Restaurar una copia
 
 1. En Actions, abre la última ejecución de **Copia de seguridad** y descarga el artefacto.
-2. Crea una base vacía. Nunca restaures sobre la base en uso: el script se niega si ya tiene tablas.
+2. Crea una base vacía, con la misma versión de PostgreSQL que `pg_dump` o más nueva: una copia hecha con una versión mayor falla al restaurarse en una menor. Nunca restaures sobre la base en uso: el script se niega si ya tiene tablas.
 3. Corre, en una máquina con `pg_restore` y `gpg`:
 
    ```bash
