@@ -88,7 +88,23 @@ model Servicio {
   duracionMin Int
   recurso     String // CONSULTORIO | PELUQUERIA
   reservable  Boolean @default(true)
+  activo      Boolean @default(true)
   citas       Cita[]
+}
+
+// Jornada de cada día: 0 = domingo ... 6 = sábado, 7 = festivos. Minutos desde la medianoche.
+model Jornada {
+  dia     Int     @id
+  abierto Boolean @default(true)
+  abre    Int
+  cierra  Int
+}
+
+// Días en que el negocio no abre.
+model Cierre {
+  fecha    DateTime @id @db.Date
+  motivo   String
+  creadoEn DateTime @default(now())
 }
 
 // Cita con fecha y hora. La regla de que dos citas no se crucen la garantiza

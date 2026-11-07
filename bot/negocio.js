@@ -3,11 +3,8 @@
 // archivo.
 module.exports = {
   nombre: 'Huellitas Veterinaria',
-  horarios: [
-    'Lunes a sábado: 8:00 a. m. – 7:00 p. m.',
-    'Domingos y festivos: 9:00 a. m. – 2:00 p. m.',
-    'Urgencias: todos los días',
-  ],
+  // Los horarios no van aquí: se editan en el panel y se leen de la base de datos.
+  urgencias: 'Urgencias: todos los días',
   ubicacion: 'Medellín, Antioquia (dirección de ejemplo en la demo)',
   pagos: 'efectivo, tarjeta, Nequi y transferencia',
 };

@@ -13,6 +13,8 @@ const { crearRutasClientes } = require('./clientes/rutas');
 const { crearRutasAvisos } = require('./avisos/rutas');
 const { crearRutasSesion, crearVerificarSesion } = require('./seguridad/sesion');
 const { crearRutasEquipo } = require('./seguridad/equipo');
+const { crearRutasAjustes } = require('./ajustes/rutas');
+const { crearRutasReportes } = require('./reportes/rutas');
 const { manejarErrores, rutaNoEncontrada } = require('./plataforma/errores');
 const { registrarError, registrarPeticiones } = require('./plataforma/registros');
 const { crearRutaSalud } = require('./plataforma/salud');
@@ -159,6 +161,8 @@ app.post('/api/bot/simulador', limiteSimulador, async (req, res) => {
 // no existe una ruta pública para crear cuentas.
 app.use('/api', crearRutasSesion(prisma, verificarSesion));
 app.use('/api', crearRutasEquipo(prisma, verificarSesion));
+app.use('/api', crearRutasAjustes(prisma, verificarSesion));
+app.use('/api', crearRutasReportes(prisma, verificarSesion));
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);

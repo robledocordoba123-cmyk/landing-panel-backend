@@ -4,6 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { ErrorAgenda, esCruce } = require('../citas/agenda');
 const { finDe, horariosPosibles, fechaLocal } = require('../citas/horario');
+const { leerCalendario } = require('../citas/calendario');
 const { avisar, enviarRecordatorios, ultimasNotificaciones } = require('./avisos');
 const { leerToken } = require('./enlace');
 const { exigirRol } = require('../seguridad/sesion');
@@ -82,7 +83,7 @@ function crearRutasAvisos(prisma, verificarToken) {
     const inicio = new Date(req.body?.inicio);
     if (Number.isNaN(inicio.getTime())) throw new ErrorAgenda('Elige un horario.', 400);
     if (inicio.getTime() === cita.inicio.getTime()) throw new ErrorAgenda('Esa ya es la hora de tu cita.', 400);
-    const permitido = horariosPosibles(fechaLocal(inicio), cita.servicio.duracionMin, ahora).some((h) => h.getTime() === inicio.getTime());
+    const permitido = horariosPosibles(fechaLocal(inicio), cita.servicio.duracionMin, ahora, await leerCalendario(prisma)).some((h) => h.getTime() === inicio.getTime());
     if (!permitido) throw new ErrorAgenda('Ese horario no está disponible. Elige otro, por favor.', 400);
 
     try {

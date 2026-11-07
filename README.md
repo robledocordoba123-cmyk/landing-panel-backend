@@ -42,6 +42,12 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 | GET, POST | `/api/usuarios` | Cuentas del equipo | Administración |
 | PATCH | `/api/usuarios/:id` | Cambia rol o desactiva | Administración |
 | GET | `/api/bitacora?pagina=` | Registro de acciones | Administración |
+| GET | `/api/horario` | Horario en frases, jornada de cada día y días cerrados | No |
+| PUT | `/api/horario` | Cambia el horario (rechaza el cambio si deja citas por fuera) | Administración |
+| POST, DELETE | `/api/cierres`, `/api/cierres/:fecha` | Cierra o vuelve a abrir un día | Administración |
+| GET | `/api/servicios/todos` | Servicios, también los ocultos | Administración |
+| POST, PATCH | `/api/servicios`, `/api/servicios/:id` | Crea o edita un servicio (precio, duración, si se reserva en línea) | Administración |
+| GET | `/api/reportes?desde=&hasta=` | Citas, ingresos estimados, inasistencia y comparación con el periodo anterior | Administración |
 | POST | `/api/clientes/:id/suprimir` | Suprime los datos personales | Administración |
 
 ## Reglas de la agenda
@@ -55,6 +61,14 @@ Node.js · Express 5 · PostgreSQL · Prisma · JWT · bcrypt · helmet · expre
 - **Privacidad.** La disponibilidad solo devuelve horarios libres, nunca quién reservó.
 
 La página, el panel y el asistente usan la misma lógica (`citas/agenda.js`). Las fechas se guardan en UTC y se trabajan en hora de Colombia.
+
+## Horario, servicios y reportes
+
+- **El horario vive en la base de datos** (`Jornada` por día y para festivos, `Cierre` para días sin atención) y se edita desde el panel. La página, la reserva, el enlace del cliente y el asistente leen el mismo calendario.
+- **Un cambio no deja clientes colgados.** Si el horario nuevo o un día cerrado dejaría por fuera citas ya reservadas, se rechaza y dice cuáles son.
+- **Los servicios no se borran, se ocultan**: hay citas que los usan. Cambiar la duración no mueve las citas ya reservadas.
+- **Reportes** con comparación contra el periodo anterior de igual largo. Los ingresos son estimados con el precio base, porque la atención no guarda lo cobrado.
+- **La demo pública se restablece** en cada arranque (horario, servicios y ocho semanas de historial), para que ningún visitante la deje cerrada.
 
 ## Clientes, mascotas e historia clínica
 
@@ -114,7 +128,7 @@ Ruta de salud, registros en JSON con id de petición, apagado ordenado y copias 
 
 ## Pruebas
 
-146 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
+161 pruebas con Jest y Supertest contra una base de datos PostgreSQL real (`huellitas_test`): agenda (festivos de 2026, horarios, cruces, reservas simultáneas, estados), clientes y mascotas, historia clínica, vacunas, enlace del cliente, correos, recordatorios, sesión, roles, bitácora, Ley 1581, datos de la demo, formulario, login, panel, seguridad, conversación completa del bot, fechas escritas en el chat, urgencias, IA (simulada) y webhook firmado. Corren solas en GitHub Actions en cada cambio.
 
 ```bash
 npm test        # aplica las migraciones a la base de pruebas y corre Jest

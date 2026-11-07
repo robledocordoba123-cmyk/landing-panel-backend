@@ -2,6 +2,7 @@
 // para que las reglas sean las mismas sin importar por dónde llegue la cita.
 const { fechaLocal, finDe, horariosPosibles, instante, sumarDias } = require('./horario');
 const { asegurarMascota } = require('../clientes/mascotas');
+const { leerCalendario } = require('./calendario');
 
 // Cambia cuando cambie la política de datos: cada autorización guarda su versión.
 const VERSION_POLITICA = '2026-11';
@@ -42,7 +43,7 @@ function ocupadas(prisma, recurso, fecha) {
 }
 
 async function disponibilidad(prisma, servicio, fecha, ahora = new Date()) {
-  const posibles = horariosPosibles(fecha, servicio.duracionMin, ahora);
+  const posibles = horariosPosibles(fecha, servicio.duracionMin, ahora, await leerCalendario(prisma));
   if (!posibles.length) return [];
   const citas = await ocupadas(prisma, servicio.recurso, fecha);
   return posibles.filter((inicio) => !citas.some((c) => seCruza({ inicio, fin: finDe(inicio, servicio.duracionMin) }, c)));
@@ -52,9 +53,11 @@ async function disponibilidad(prisma, servicio, fecha, ahora = new Date()) {
 const esCruce = (err) => /23P01|cita_sin_cruces/.test(err.message || '');
 
 async function crearCita(prisma, { servicio, inicio, nombre, email, telefono, mascota, especie, notas, origen = 'WEB', ip = null }, ahora = new Date()) {
-  if (!servicio.reservable) throw new ErrorAgenda('Las urgencias se atienden sin cita: ven directamente.', 400);
+  if (!servicio.activo) throw new ErrorAgenda('Ese servicio ya no se ofrece.', 400);
+  if (!servicio.reservable) throw new ErrorAgenda('Ese servicio no se reserva en línea: ven directamente o escríbenos.', 400);
 
-  const permitido = horariosPosibles(fechaLocal(inicio), servicio.duracionMin, ahora).some((h) => h.getTime() === inicio.getTime());
+  const calendario = await leerCalendario(prisma);
+  const permitido = horariosPosibles(fechaLocal(inicio), servicio.duracionMin, ahora, calendario).some((h) => h.getTime() === inicio.getTime());
   if (!permitido) throw new ErrorAgenda('Ese horario no está disponible. Elige otro, por favor.', 400);
 
   const activas = await prisma.cita.count({ where: { mascota: { cliente: { email } }, estado: { in: ['PENDIENTE', 'CONFIRMADA'] }, inicio: { gt: ahora } } });

@@ -3,6 +3,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { ErrorAgenda, cambiarEstado, citasEntre, crearCita, disponibilidad } = require('./agenda');
 const { fechaLocal, fechaValida, horaLegible, jornadaDe, sumarDias } = require('./horario');
+const { leerCalendario } = require('./calendario');
 const { ESPECIES } = require('../clientes/mascotas');
 const { avisar } = require('../avisos/avisos');
 const { crearToken } = require('../avisos/enlace');
@@ -42,7 +43,7 @@ function crearRutasCitas(prisma, verificarToken) {
 
   rutas.get('/servicios', async (req, res) => {
     try {
-      res.json(await prisma.servicio.findMany({ orderBy: { id: 'asc' } }));
+      res.json(await prisma.servicio.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }));
     } catch (err) {
       responderError(res, err, 'No se pudieron obtener los servicios');
     }
@@ -55,9 +56,15 @@ function crearRutasCitas(prisma, verificarToken) {
     if (!Number.isInteger(servicioId) || !fechaValida(fecha)) return res.status(400).json({ error: 'Datos no válidos' });
     try {
       const servicio = await prisma.servicio.findUnique({ where: { id: servicioId } });
-      if (!servicio || !servicio.reservable) return res.status(404).json({ error: 'Ese servicio no se reserva en línea' });
+      if (!servicio || !servicio.reservable || !servicio.activo) return res.status(404).json({ error: 'Ese servicio no se reserva en línea' });
       const horarios = await disponibilidad(prisma, servicio, fecha);
-      res.json({ fecha, jornada: jornadaDe(fecha), horarios: horarios.map((h) => ({ inicio: h, hora: horaLegible(h) })) });
+      const calendario = await leerCalendario(prisma);
+      res.json({
+        fecha,
+        jornada: jornadaDe(fecha, calendario),
+        cerrado: calendario.cierres.get(fecha) || null,
+        horarios: horarios.map((h) => ({ inicio: h, hora: horaLegible(h) })),
+      });
     } catch (err) {
       responderError(res, err, 'No se pudo consultar la disponibilidad');
     }

@@ -9,7 +9,7 @@ function iaDisponible() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-function instrucciones(servicios) {
+function instrucciones(servicios, horarios = []) {
   const lista = servicios.map((s) => `- ${s.nombre}: ${s.detalle} (desde $${s.precioDesde.toLocaleString('es-CO')})`).join('\n');
   return [
     `Eres el asistente de WhatsApp de ${negocio.nombre}, una veterinaria en Colombia.`,
@@ -17,14 +17,14 @@ function instrucciones(servicios) {
     'Si la pregunta no tiene que ver con la veterinaria o no sabes la respuesta, dilo y sugiere escribir "menú" o "persona".',
     'Nunca des diagnósticos ni medicamentos: si la mascota está mal, recomienda pedir cita o ir a urgencias.',
     `Servicios:\n${lista}`,
-    `Horarios: ${negocio.horarios.join('; ')}.`,
+    `Horarios: ${horarios.join('; ')}.`,
     `Ubicación: ${negocio.ubicacion}. Medios de pago: ${negocio.pagos}.`,
   ].join('\n');
 }
 
 // Devuelve el texto de la IA, o null si no hay clave o si la llamada falla
 // (el asistente sigue funcionando con su respuesta por defecto).
-async function responderConIA(pregunta, servicios) {
+async function responderConIA(pregunta, servicios, horarios) {
   if (!iaDisponible()) return null;
   try {
     const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
@@ -37,7 +37,7 @@ async function responderConIA(pregunta, servicios) {
       body: JSON.stringify({
         model: MODELO,
         max_tokens: 300,
-        system: instrucciones(servicios),
+        system: instrucciones(servicios, horarios),
         messages: [{ role: 'user', content: pregunta.slice(0, 500) }],
       }),
     });
