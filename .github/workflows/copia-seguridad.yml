@@ -27,7 +27,7 @@ jobs:
           else
             echo "listos=si" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.secretos.outputs.listos == 'si'
       - name: Instalar el cliente de PostgreSQL
         if: steps.secretos.outputs.listos == 'si'
@@ -39,7 +39,7 @@ jobs:
       - name: Sacar la copia cifrada
         if: steps.secretos.outputs.listos == 'si'
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" scripts/copia-seguridad.sh "huellitas-$(date -u +%Y%m%d).dump.gpg"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.secretos.outputs.listos == 'si'
         with:
           name: copia-huellitas
