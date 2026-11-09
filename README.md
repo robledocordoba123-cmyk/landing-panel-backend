@@ -4,6 +4,12 @@ API REST de Huellitas Veterinaria (negocio **ficticio**, proyecto de portafolio)
 
 **Demo en vivo:** [huellitas-veterinaria.vercel.app](https://huellitas-veterinaria.vercel.app) · API: [huellitas-api-s584.onrender.com](https://huellitas-api-s584.onrender.com) (plan gratis de Render: la primera petición puede tardar unos 50 segundos).
 
+## Documentación
+
+- [Arquitectura](docs/arquitectura.md): piezas, módulos, modelo de datos y recorridos principales, con diagramas.
+- [Decisiones de diseño](docs/decisiones.md): qué se eligió en cada punto clave, qué se descartó y por qué.
+- [Operación](docs/operacion.md): salud, registros, copias de seguridad y cómo restaurarlas.
+
 ## Tecnologías
 
 Node.js 22 · Express 5 · PostgreSQL · Prisma 6 · JWT · bcrypt · helmet · express-rate-limit
